@@ -13,27 +13,27 @@ locals {
 }
 
 resource "aws_subnet" "public" {
-  count                   = var.azs_count
+  count                   = length(var.availability_zones)
   vpc_id                  = local.vpc_id
-  availability_zone       = var.azs_names[count.index]
+  availability_zone       = var.availability_zones[count.index]
   cidr_block              = cidrsubnet(var.cidr_block, 8, count.index)
   map_public_ip_on_launch = true
-  tags                    = { Name = "${var.name}-public-${var.azs_names[count.index]}" }
+  tags                    = { Name = "${var.name}-public-${var.availability_zones[count.index]}" }
 }
 
 resource "aws_subnet" "private" {
-  count             = var.azs_count
-  vpc_id            = local.vpc_id
-  cidr_block        = cidrsubnet(var.cidr_block, 8, count.index + var.azs_count)
-  availability_zone = var.azs_names[count.index]
+  count              = length(var.availability_zones)
+  vpc_id             = local.vpc_id
+  cidr_block         = cidrsubnet(var.cidr_block, 8, count.index + length(var.availability_zones))
+  availability_zone = var.availability_zones[count.index]
 
   tags = {
-    Name = "${var.name}-private-${count.index + 1}"
+    Name = "${var.name}-private-${var.availability_zones[count.index]}"
   }
 }
 
 resource "aws_route_table" "private" {
-  count  = var.azs_count
+  count  = length(var.availability_zones)
   vpc_id = local.vpc_id
 
   tags = {
@@ -42,7 +42,7 @@ resource "aws_route_table" "private" {
 }
 
 resource "aws_route_table_association" "private" {
-  count          = var.azs_count
+  count          = length(var.availability_zones)
   subnet_id      = aws_subnet.private[count.index].id
   route_table_id = aws_route_table.private[count.index].id
 }
@@ -59,6 +59,12 @@ resource "aws_route" "public_internet_gateway" {
   route_table_id         = aws_route_table.public.id
   destination_cidr_block = "0.0.0.0/0"
   gateway_id             = var.internet_gateway_id
+}
+
+resource "aws_route_table_association" "public" {
+  count          = length(var.availability_zones)
+  subnet_id      = aws_subnet.public[count.index].id
+  route_table_id = aws_route_table.public.id
 }
 
 

@@ -32,3 +32,14 @@ variable "key_name" {
   description = "The name of the key pair to use for SSH access"
   type        = string
 }
+
+variable "log_group_name" {
+  description = "The name of the CloudWatch log group"
+  type        = string
+}
+
+variable "log_stream_name" {
+  description = "The prefix for the CloudWatch log stream"
+  type        = string
+  default     = "ecs"
+}

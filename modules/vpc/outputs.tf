@@ -42,3 +42,13 @@ output "internet_gateway_id" {
   description = "ID of the Internet Gateway"
   value       = var.internet_gateway_id
 }
+
+output "availability_zones" {
+  description = "List of AZs where public subnets are created"
+  value       = aws_subnet.public[*].availability_zone
+}
+
+output "region" {
+  description = "The AWS region"
+  value       = var.region
+}

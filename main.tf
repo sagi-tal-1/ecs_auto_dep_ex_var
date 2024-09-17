@@ -17,14 +17,7 @@ provider "aws" {
   max_retries = 3
 }
 
-data "aws_availability_zones" "available" {
-  state = "available"
-}
 
-locals {
-  azs_count = 2
-  azs_names = data.aws_availability_zones.available.names
-}
 
 resource "random_id" "unique" {
   byte_length = 4
@@ -46,7 +39,19 @@ resource "local_file" "private_key" {
   file_permission = "0600"
 }
 
+
+
+data "aws_availability_zones" "available" {
+  state = "available"
+
+}
+
 # 1. VPC Module
+locals {
+  azs_count = 2
+  azs_names = slice(data.aws_availability_zones.available.names, 0, 2)
+}
+
 module "vpc" {
   source              = "./modules/vpc"
   name                = "demo-vpc-${random_id.unique.hex}"
@@ -56,6 +61,8 @@ module "vpc" {
   azs_names           = slice(data.aws_availability_zones.available.names, 0, 2)
   nat_gateway_ids     = [module.nat_gateway.nat_gateway_id]
   internet_gateway_id = module.internet_gateway.internet_gateway_id
+  availability_zones = ["a1"]  # Set your desired availability zones here
+ 
 }
 
 # 2. Security Group Modules
@@ -122,17 +129,23 @@ module "ecs_task_role" {
   exec_role_name_prefix = "demo-ecs-exec-role-${random_id.unique.hex}"
 }
 
-# 9. CloudWatch Logs Module
-resource "aws_cloudwatch_log_group" "ecs_logs" {
-  name              = "ecs-logs-${random_id.unique.hex}"
-  retention_in_days = 30
+# 9. AWS CloudWatch Logs
+module "log_group" {
+  source            = "./modules/cloudwatch_logs"
+  name = "log_group${random_id.unique.hex}"
+  name_prefix       = var.cloudwatch_logs_name_prefix
+  retention_in_days = var.cloudwatch_logs_retention_days
+  log_group_name = module.log_group.cloudwatch_log_group_name
+  
 }
 
-module "cloudwatch_logs" {
+module "log_stream" {
   source         = "./modules/cloudwatch_logs"
-  log_group_name = aws_cloudwatch_log_group.ecs_logs.name
-  retention_days = 30
+  name = "log_stream${random_id.unique.hex}"
+  name_prefix       = var.cloudwatch_logs_name_prefix
+  log_group_name = module.log_group.cloudwatch_log_group_name
 }
+
 
 # 10. ECS Cluster Module
 module "ecs_cluster" {
@@ -161,6 +174,9 @@ module "ecs_launch_template" {
   security_group_id        = module.ecs_node_sg.security_group_id
   iam_instance_profile_arn = module.ecs_node_role.instance_profile_arn
   cluster_name             = module.ecs_cluster.cluster_name
+  log_group_name  = module.log_group.cloudwatch_log_group_name
+  log_stream_name      = module.log_group.cloudwatch_log_stream_name
+  
 }
 
 # 13. Auto Scaling Group Module
@@ -177,33 +193,32 @@ module "ecs_asg" {
 
 # 14. ECS Task Definition Module
 module "ecs_task_definition" {
-  source             = "./modules/ecs_task_definition"
-  family             = "nginx-task-${random_id.unique.hex}"
-  container_name     = "nginx"
-  log_group_arn      = aws_cloudwatch_log_group.ecs_logs.arn
-  log_group_name     = aws_cloudwatch_log_group.ecs_logs.name
-  log_stream_prefix  = "ecs"
-  cpu                = 256
-  memory             = 256
-  nginx_port         = 80
-  node_port          = 3000
-  example_env_value  = "example_value"
-  log_region         = "us-east-1"
-  execution_role_arn = module.ecs_task_role.ecs_exec_role_arn
-  task_role_arn      = module.ecs_task_role.ecs_task_role_arn
-  nginx_log_stream_arn = module.cloudwatch_logs.nginx_log_stream_arn
-  nodejs_log_stream_arn = module.cloudwatch_logs.nodejs_log_stream_arn
+  source                = "./modules/ecs_task_definition"
+  family                = "nginx-task-${random_id.unique.hex}"
+  container_name        = "nginx"
+  log_group_name        = module.log_group.cloudwatch_log_group_name
+  log_stream_prefix     = "ecs"
+  cpu                   = 256
+  memory                = 256
+  nginx_port            = 80
+  node_port             = 3000
+  example_env_value     = "example_value"
+  task_role_arn         = module.ecs_node_role.role_arn
+  execution_role_arn    = module.ecs_node_role.ecs_exec_role_arn
+  log_region            = module.vpc.region # or the specific region you want to use for logs
+  availability_zones  = module.vpc.availability_zones 
+  
 
-  depends_on         = [aws_cloudwatch_log_group.ecs_logs, module.ecs_task_role]
+  depends_on = [module.log_group, module.log_stream, module.ecs_task_role]
 }
 
 # 15. ECS Service Module
 module "ecs_service" {
   source                    = "./modules/ecs_service"
   name_prefix               = var.name_prefix
-  service_name              = "${var.name_prefix}-service-${random_id.unique.hex}"
+  service_name              = "${var.name_prefix}-ecs-service-${random_id.unique.hex}"    
   cluster_id                = module.ecs_cluster.cluster_id
-  ecs_cluster_id            = module.ecs_cluster.cluster_id
+  ecs_cluster_id            = module.ecs_cluster.ecs_cluster_id
   task_definition_arn       = module.ecs_task_definition.task_definition_arn
   desired_count             = 2
   subnet_ids                = module.vpc.public_subnet_ids
@@ -213,11 +228,11 @@ module "ecs_service" {
   capacity_provider_name    = module.ecs_capacity_provider.capacity_provider_name
   vpc_id                    = module.vpc.vpc_id
   public_subnet_ids         = module.vpc.public_subnet_ids
-  log_group_arn             = module.cloudwatch_logs.log_group_arn
-  cloudwatch_log_group_name = module.cloudwatch_logs.log_group_name
   security_group_id         = module.ecs_node_sg.security_group_id
+  log_group_arn             = module.log_group.cloudwatch_log_group_arn
+  cloudwatch_log_group_name = module.log_group.cloudwatch_log_group_name
 
-  depends_on = [module.cloudwatch_logs, module.ecs_task_definition, module.ecs_capacity_provider]
+  depends_on = [module.log_group, module.log_stream, module.ecs_task_definition, module.ecs_capacity_provider]
 }
 
 resource "null_resource" "drain_ecs_cluster" {

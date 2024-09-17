@@ -1,3 +1,4 @@
+# Updated ECS Task Definition
 resource "aws_ecs_task_definition" "app" {
   family                   = var.family
   requires_compatibilities = ["EC2"]
@@ -22,22 +23,26 @@ resource "aws_ecs_task_definition" "app" {
         }
       ]
       links = ["${var.container_name}-nodejs"]
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          awslogs-group         = var.log_group_name
+          awslogs-region        = var.log_region
+          awslogs-stream-prefix = var.log_stream_prefix
+        }
+      }
       mountPoints = [
         {
           sourceVolume  = "nginx-config"
           containerPath = "/etc/nginx/nginx.conf"
           readOnly      = true
+        },
+        {
+          sourceVolume  = "nginx-logs"
+          containerPath = "/var/log/nginx"
+          readOnly      = false
         }
       ]
-      logConfiguration = {
-        logDriver = "awslogs"
-        options = {
-          awslogs-group         = var.log_group_arn
-          awslogs-region        = var.log_region
-          awslogs-stream-prefix = "nginx"
-          awslogs-create-group  = "false"
-        }
-      }
     },
     {
       name      = "${var.container_name}-nodejs"
@@ -61,22 +66,33 @@ resource "aws_ecs_task_definition" "app" {
       logConfiguration = {
         logDriver = "awslogs"
         options = {
-          awslogs-group         = var.log_group_arn
+          awslogs-group         = var.log_group_name
           awslogs-region        = var.log_region
-          awslogs-stream-prefix = "nodejs"
-          awslogs-create-group  = "false"
+          awslogs-stream-prefix = var.log_stream_prefix
         }
       }
+      mountPoints = [
+        {
+          sourceVolume  = "nodejs-logs"
+          containerPath = "/app/logs"
+          readOnly      = false
+        }
+      ]
     }
   ])
 
   volume {
     name      = "nginx-config"
-    host_path = "${path.module}/nginx.conf"
+    host_path = "/etc/nginx/nginx.conf"
   }
 
-  depends_on = [
-    var.nginx_log_stream_arn,
-    var.nodejs_log_stream_arn
-  ]
+  volume {
+    name      = "nginx-logs"
+    host_path = "/var/log/ecs/nginx"
+  }
+
+  volume {
+    name      = "nodejs-logs"
+    host_path = "/var/log/ecs/nodejs"
+  }
 }

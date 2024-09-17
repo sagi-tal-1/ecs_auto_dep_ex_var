@@ -1,23 +1,20 @@
-output "log_group_name" {
-  value = aws_cloudwatch_log_group.ecs.name
+
+output "cloudwatch_log_group_name" {
+  description = "Name of Cloudwatch log group"
+  value       = aws_cloudwatch_log_group.this.name
 }
 
-output "log_group_arn" {
-  value = aws_cloudwatch_log_group.ecs.arn
+output "cloudwatch_log_group_arn" {
+  description = "ARN of Cloudwatch log group"
+  value       = aws_cloudwatch_log_group.this.arn
 }
 
-output "nginx_log_stream_name" {
-  value = aws_cloudwatch_log_stream.nginx.name
+output "cloudwatch_log_stream_name" {
+  description = "Name of Cloudwatch log stream"
+  value       = aws_cloudwatch_log_stream.this.name
 }
 
-output "nodejs_log_stream_name" {
-  value = aws_cloudwatch_log_stream.nodejs.name
-}
-
-output "nginx_log_stream_arn" {
-  value = aws_cloudwatch_log_stream.nginx.arn
-}
-
-output "nodejs_log_stream_arn" {
-  value = aws_cloudwatch_log_stream.nodejs.arn
+output "cloudwatch_log_stream_arn" {
+  description = "ARN of Cloudwatch log stream"
+  value       = aws_cloudwatch_log_stream.this.arn
 }

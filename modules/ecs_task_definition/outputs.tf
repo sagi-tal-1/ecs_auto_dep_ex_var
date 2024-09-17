@@ -21,3 +21,4 @@ output "nginx_port" {
 output "node_port" {
   value = var.node_port
 }
+

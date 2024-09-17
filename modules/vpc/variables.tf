@@ -29,6 +29,13 @@ variable "azs_names" {
   description = "List of AZ names"
   type        = list(string)
 }
+
+
+variable "availability_zones" {
+  description = "List of availability zones for the VPC"
+  type        = list(string)
+}
+
 variable "existing_vpc_id" {
   description = "ID of an existing VPC to use (leave blank to create a new VPC)"
   type        = string
@@ -60,4 +67,10 @@ variable "existing_internet_gateway_id" {
 variable "internet_gateway_id" {
   description = "ID of the Internet Gateway"
   type        = string
+}
+
+variable "region" {
+  description = "AWS region"
+  type        = string
+  default     = "us-east-1"
 }

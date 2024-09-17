@@ -28,6 +28,8 @@ variable "memory" {
   type        = number
 }
 
+
+
 variable "example_env_value" {
   description = "Example environment variable value"
   type        = string
@@ -48,15 +50,6 @@ variable "task_role_arn" {
   type        = string
 }
 
-variable "nginx_log_stream_arn" {
-  description = "ARN of the nginx CloudWatch log stream"
-  type        = string
-}
-
-variable "nodejs_log_stream_arn" {
-  description = "ARN of the nodejs CloudWatch log stream"
-  type        = string
-}
 
 variable "internal_app_port" {
   description = "The port for the internal application (e.g., nodejs)"
@@ -74,7 +67,8 @@ variable "node_port" {
   type        = number
 }
 
-variable "log_group_arn" {
-  description = "ARN of the CloudWatch log group"
-  type        = string
+variable "availability_zones" {
+  description = "List of availability zones"
+  type        = list(string)
 }
+

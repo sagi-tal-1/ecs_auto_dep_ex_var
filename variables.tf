@@ -62,11 +62,7 @@ variable "ecs_service_count" {
   default     = 1
 }
 
-variable "azs_count" {
-  description = "Number of Availability Zones to use"
-  type        = number
-  default     = 2
-}
+
 
 variable "vpc_cidr" {
   description = "The CIDR block for the VPC"
@@ -80,11 +76,22 @@ variable "project_name" {
   default     = "demo"
 }
 
+
+variable "cloudwatch_logs_name_prefix" {
+  description = "Prefix for the CloudWatch Log Group name"
+  type        = string
+  default     = "my-log-group-"
+}
+
+variable "cloudwatch_logs_retention_days" {
+  description = "Number of days to retain logs in the CloudWatch Log Group"
+  type        = number
+  default     = 1
+}
+
 variable "name_prefix" {
-  description = "Prefix to be used in the naming of some of the created resources"
+  description = "Prefix for resource names"
   type        = string
   default     = "demo"  # You can change this default value
 }
-
-
 
