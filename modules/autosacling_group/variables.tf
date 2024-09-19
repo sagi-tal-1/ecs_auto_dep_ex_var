@@ -35,3 +35,9 @@ variable "desired_capacity" {
   type        = number
   default     = 1
 }
+
+variable "enabled" {
+  description = "Whether to create the Auto Scaling Group"
+  type        = bool
+  default     = true
+}

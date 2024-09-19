@@ -17,7 +17,7 @@ resource "aws_subnet" "public" {
   vpc_id                  = local.vpc_id
   availability_zone       = var.availability_zones[count.index]
   cidr_block              = cidrsubnet(var.cidr_block, 8, count.index)
-  map_public_ip_on_launch = true
+  map_public_ip_on_launch = var.map_public_ip_on_launch
   tags                    = { Name = "${var.name}-public-${var.availability_zones[count.index]}" }
 }
 

@@ -46,42 +46,44 @@ data "aws_availability_zones" "available" {
 
 }
 
-# 1. VPC Module
+# Networking -----------------------
+# 1 VPC Module
 locals {
   azs_count = 2
   azs_names = slice(data.aws_availability_zones.available.names, 0, 2)
 }
 
 module "vpc" {
-  source              = "./modules/vpc"
-  name                = "demo-vpc-${random_id.unique.hex}"
-  name_prefix         = "demo-${random_id.unique.hex}"
-  cidr_block          = var.vpc_cidr
-  azs_count           = 2
-  azs_names           = slice(data.aws_availability_zones.available.names, 0, 2)
-  nat_gateway_ids     = [module.nat_gateway.nat_gateway_id]
-  internet_gateway_id = module.internet_gateway.internet_gateway_id
-  availability_zones = ["a1"]  # Set your desired availability zones here
- 
+  source                  = "./modules/vpc"
+  name                    = "demo-vpc-${random_id.unique.hex}"
+  name_prefix             = "demo-${random_id.unique.hex}"
+  cidr_block              = var.vpc_cidr
+  azs_count               = local.azs_count
+  azs_names               = local.azs_names
+  nat_gateway_ids         = [module.nat_gateway.nat_gateway_id]
+  internet_gateway_id     = module.internet_gateway.internet_gateway_id
+  availability_zones      = local.azs_names
+  map_public_ip_on_launch = true  # Set to true to allow ECS to manage public IPs
 }
 
-# 2. Security Group Modules
-module "ecs_node_sg" {
-  source                = "./modules/ecs_node_sg"
-  name_prefix           = "demo-ecs-sg-${random_id.unique.hex}"
-  vpc_id                = module.vpc.vpc_id
-  alb_security_group_id = module.alb.security_group_id
-  nginx_port            = module.ecs_task_definition.nginx_port
-  node_port             = module.ecs_task_definition.node_port
-}
-
-# 3. Internet Gateway Module
+# 2. Internet Gateway Module
 module "internet_gateway" {
-  source    = "./modules/internet_gateway"
-  vpc_id    = module.vpc.vpc_id
-  name      = "demo-igw-${random_id.unique.hex}"
-  azs_count = local.azs_count
-  azs_names = local.azs_names
+  source      = "./modules/internet_gateway"
+  vpc_id      = module.vpc.vpc_id
+  name        = "demo-igw-${random_id.unique.hex}"
+  azs_count   = local.azs_count
+  azs_names   = local.azs_names
+  create_eips = true  # Set to false when you need to destroy resources
+}
+
+# 3. NAT Gateway Module
+module "nat_gateway" {
+  source            = "./modules/nat_gateway"
+  vpc_id            = module.vpc.vpc_id
+  public_subnet_ids = [module.vpc.public_subnet_ids[0]]
+  name_prefix       = "demo-${random_id.unique.hex}"
+  az_count          = 1
+  region            = "us-east-1"
 }
 
 # 4. Route Table Module
@@ -95,16 +97,18 @@ module "route_table" {
   route_table_id      = module.vpc.public_route_table_id
 }
 
-# 5. NAT Gateway Module
-module "nat_gateway" {
-  source            = "./modules/nat_gateway"
-  vpc_id            = module.vpc.vpc_id
-  public_subnet_ids = [module.vpc.public_subnet_ids[0]]
-  name_prefix       = "demo-${random_id.unique.hex}"
-  az_count          = 1
-  region            = "us-east-1"
+#Security -----------------------
+# 5. Security Group Modules
+module "ecs_node_sg" {
+  source                = "./modules/ecs_node_sg"
+  name_prefix           = "demo-ecs-sg-${random_id.unique.hex}"
+  vpc_id                = module.vpc.vpc_id
+  alb_security_group_id = module.alb.security_group_id
+  nginx_port            = module.ecs_task_definition.nginx_port
+  node_port             = module.ecs_task_definition.node_port
 }
 
+# Load Balancer -----------------------
 # 6. Application Load Balancer (ALB) Module
 module "alb" {
   source      = "./modules/alb"
@@ -115,6 +119,7 @@ module "alb" {
   nginx_port  = module.ecs_task_definition.nginx_port
 }
 
+# IAM Roles -----------------------
 # 7. ECS Node Role Module
 module "ecs_node_role" {
   source              = "./modules/ecs_node_role"
@@ -129,24 +134,15 @@ module "ecs_task_role" {
   exec_role_name_prefix = "demo-ecs-exec-role-${random_id.unique.hex}"
 }
 
+# Logging ----------------------- 
 # 9. AWS CloudWatch Logs
 module "log_group" {
   source            = "./modules/cloudwatch_logs"
-  name = "log_group${random_id.unique.hex}"
-  name_prefix       = var.cloudwatch_logs_name_prefix
+  name_prefix       = "log_group-${random_id.unique.hex}"
   retention_in_days = var.cloudwatch_logs_retention_days
-  log_group_name = module.log_group.cloudwatch_log_group_name
-  
 }
 
-module "log_stream" {
-  source         = "./modules/cloudwatch_logs"
-  name = "log_stream${random_id.unique.hex}"
-  name_prefix       = var.cloudwatch_logs_name_prefix
-  log_group_name = module.log_group.cloudwatch_log_group_name
-}
-
-
+# ECS Cluster and related resources ----------------------- 
 # 10. ECS Cluster Module
 module "ecs_cluster" {
   source                 = "./modules/ecs_cluster"
@@ -156,15 +152,30 @@ module "ecs_cluster" {
   asg_arn                = module.ecs_asg.asg_arn
 }
 
-# 11. ECS Capacity Provider Module
-module "ecs_capacity_provider" {
-  source                 = "./modules/ecs_capacity_provider"
-  capacity_provider_name = "demo-capacity-provider-${random_id.unique.hex}"
-  asg_arn                = module.ecs_asg.asg_arn
-  cluster_name           = module.ecs_cluster.cluster_name
+
+# 11. ECS Launch Template Module ----------------------- 
+# Get the latest ECS-optimized AMI in the region
+data "aws_ami" "ecs_optimized" {
+  most_recent = true
+
+  filter {
+    name   = "name"
+    values = ["amzn2-ami-ecs-hvm-*-x86_64-ebs"]
+  }
+
+  filter {
+    name   = "owner-id"
+    values = ["591542846629"]  # AWS ECS Optimized AMI account owner ID
+  }
+
+  filter {
+    name   = "virtualization-type"
+    values = ["hvm"]
+  }
+
+  owners = ["591542846629"]  # Amazon ECS AMI official owner
 }
 
-# 12. ECS Launch Template Module
 module "ecs_launch_template" {
   source                   = "./modules/ecs_launch_template"
   name_prefix              = "demo-ecs-ec2-${random_id.unique.hex}"
@@ -174,14 +185,14 @@ module "ecs_launch_template" {
   security_group_id        = module.ecs_node_sg.security_group_id
   iam_instance_profile_arn = module.ecs_node_role.instance_profile_arn
   cluster_name             = module.ecs_cluster.cluster_name
-  log_group_name  = module.log_group.cloudwatch_log_group_name
-  log_stream_name      = module.log_group.cloudwatch_log_stream_name
+  log_group_name = module.log_group.cloudwatch_log_group_name
+  
   
 }
 
-# 13. Auto Scaling Group Module
+# 12. Scaling Group Module ----------------------- 
 module "ecs_asg" {
-  source             = "./modules/ecs_asg"
+  source             = "./modules/autosacling_group"
   name_prefix        = "demo-ecs-asg-${random_id.unique.hex}"
   subnet_ids         = module.vpc.public_subnet_ids
   min_size           = 1
@@ -191,7 +202,22 @@ module "ecs_asg" {
   instance_name      = "demo-ecs-instance-${random_id.unique.hex}"
 }
 
-# 14. ECS Task Definition Module
+# 13. ecs_capacity_provider Module ----------------------- 
+module "ecs_capacity_provider" {
+  source                 = "./modules/ecs_capacity_provider"
+  capacity_provider_name = "demo-capacity-provider-${random_id.unique.hex}"
+  asg_arn                = module.ecs_asg.asg_arn
+  cluster_name           = module.ecs_cluster.cluster_name
+
+  weight                 = 100
+  max_scaling_step_size  = 1
+  min_scaling_step_size  = 1
+  target_capacity        = 100
+  base_capacity          = 1
+
+}
+
+# 14. ECS Task Definition Module ----------------------- 
 module "ecs_task_definition" {
   source                = "./modules/ecs_task_definition"
   family                = "nginx-task-${random_id.unique.hex}"
@@ -207,12 +233,13 @@ module "ecs_task_definition" {
   execution_role_arn    = module.ecs_node_role.ecs_exec_role_arn
   log_region            = module.vpc.region # or the specific region you want to use for logs
   availability_zones  = module.vpc.availability_zones 
-  
+  cloudwatch_log_group_arn = module.log_group.cloudwatch_log_group_arn
+  cloudwatch_log_group_name = module.log_group.cloudwatch_log_group_name
 
-  depends_on = [module.log_group, module.log_stream, module.ecs_task_role]
+  depends_on = [module.log_group, ]
 }
 
-# 15. ECS Service Module
+# 15. ECS Service Module ----------------------- 
 module "ecs_service" {
   source                    = "./modules/ecs_service"
   name_prefix               = var.name_prefix
@@ -231,8 +258,20 @@ module "ecs_service" {
   security_group_id         = module.ecs_node_sg.security_group_id
   log_group_arn             = module.log_group.cloudwatch_log_group_arn
   cloudwatch_log_group_name = module.log_group.cloudwatch_log_group_name
+}
+# 16. ECS Service auto_scaling  ----------------------- 
+  module "ecs_service_auto_scaling" {
+  source = "./modules/ecs_service_auto_scaling"
 
-  depends_on = [module.log_group, module.log_stream, module.ecs_task_definition, module.ecs_capacity_provider]
+  cluster_name        = module.ecs_cluster.cluster_name
+  service_name        = module.ecs_service.service_name
+  min_capacity        = 2
+  max_capacity        = 5
+  target_cpu_value    = 80
+  target_memory_value = 80
+
+ depends_on = [module.ecs_service]
+
 }
 
 resource "null_resource" "drain_ecs_cluster" {

@@ -5,23 +5,24 @@ resource "aws_ecs_capacity_provider" "main" {
     auto_scaling_group_arn         = var.asg_arn
     managed_termination_protection = "DISABLED"
 
+
     managed_scaling {
-      maximum_scaling_step_size = 1000
-      minimum_scaling_step_size = 1
       status                    = "ENABLED"
-      target_capacity           = 100
+      target_capacity           = var.target_capacity
+      maximum_scaling_step_size = var.max_scaling_step_size
+      minimum_scaling_step_size = var.min_scaling_step_size
+      
     }
   }
 }
 
 resource "aws_ecs_cluster_capacity_providers" "main" {
   cluster_name = var.cluster_name
-
   capacity_providers = [aws_ecs_capacity_provider.main.name]
 
   default_capacity_provider_strategy {
-    base              = 1
-    weight            = 100
+    base              = var.base_capacity
+    weight            = var.weight
     capacity_provider = aws_ecs_capacity_provider.main.name
   }
 }

@@ -26,9 +26,9 @@ resource "aws_ecs_task_definition" "app" {
       logConfiguration = {
         logDriver = "awslogs"
         options = {
-          awslogs-group         = var.log_group_name
+          awslogs-group         = var.cloudwatch_log_group_name
           awslogs-region        = var.log_region
-          awslogs-stream-prefix = var.log_stream_prefix
+          awslogs-stream-prefix = "nginx"
         }
       }
       mountPoints = [
@@ -66,9 +66,9 @@ resource "aws_ecs_task_definition" "app" {
       logConfiguration = {
         logDriver = "awslogs"
         options = {
-          awslogs-group         = var.log_group_name
+          awslogs-group         = var.cloudwatch_log_group_name
           awslogs-region        = var.log_region
-          awslogs-stream-prefix = var.log_stream_prefix
+          awslogs-stream-prefix = "node-js"
         }
       }
       mountPoints = [

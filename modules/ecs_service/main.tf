@@ -4,10 +4,18 @@ resource "aws_ecs_service" "app" {
   task_definition = var.task_definition_arn
   desired_count   = 1
 
-  capacity_provider_strategy {
-    capacity_provider = var.capacity_provider_name
-    weight            = 100
-    base              = 1
+  dynamic "capacity_provider_strategy" {
+    for_each = var.capacity_provider_name != "" ? [1] : []
+    content {
+      capacity_provider = var.capacity_provider_name
+      weight            = 100
+      base              = 1
+    }
+  }
+
+  ordered_placement_strategy {
+    type  = "spread"
+    field = "instanceId"
   }
 
   load_balancer {
@@ -29,8 +37,12 @@ resource "aws_ecs_service" "app" {
     ignore_changes = [desired_count]
   }
 
-  network_configuration {
-    security_groups = [var.security_group_id]
-    subnets         = var.subnet_ids
+  dynamic "network_configuration" {
+    for_each = var.network_mode == "awsvpc" ? [1] : []
+    content {
+      security_groups  = [var.security_group_id]
+      subnets          = var.subnet_ids
+      assign_public_ip = true
+    }
   }
 }

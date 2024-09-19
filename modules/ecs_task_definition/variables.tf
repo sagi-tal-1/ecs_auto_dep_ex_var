@@ -72,3 +72,11 @@ variable "availability_zones" {
   type        = list(string)
 }
 
+variable "cloudwatch_log_group_arn" {
+  description = "ARN of the CloudWatch Log Group"
+  type        = string
+}
+variable "cloudwatch_log_group_name" {
+  description = "ARN of the CloudWatch Log Group"
+  type        = string
+}

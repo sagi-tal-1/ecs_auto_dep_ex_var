@@ -26,6 +26,8 @@ resource "aws_launch_template" "ecs_ec2" {
 
   # Start CloudWatch Logs agent
   systemctl start amazon-cloudwatch-agent
+
+  echo 'ECS_CONTAINER_INSTANCE_TAGS={"Name": "${var.name_prefix}-{instance_id}"}' >> /etc/ecs/ecs.config
 EOF
 )
 

@@ -17,3 +17,9 @@ variable "azs_names" {
   description = "List of availability zone names for Elastic IPs."
   type        = list(string)
 }
+
+variable "create_eips" {
+  description = "Whether to create Elastic IPs for the Internet Gateway"
+  type        = bool
+  default     = true
+}

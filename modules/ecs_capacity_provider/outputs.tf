@@ -7,7 +7,4 @@ output "cluster_capacity_providers" {
   value = aws_ecs_cluster_capacity_providers.main.capacity_providers
 }
 
-# Remove or comment out the following output
-# output "ecs_cluster" {
-#   value = aws_ecs_cluster.main.id
-# }
+

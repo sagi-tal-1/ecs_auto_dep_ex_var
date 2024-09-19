@@ -77,4 +77,14 @@ variable "nginx_port" {
   description = "Port number for Nginx container"
   type        = number
 }
+variable "retention_in_days" {
+  description = "Retention period for the CloudWatch Log Group (in days)"
+  type        = number
+  default     = 1
+}
 
+variable "network_mode" {
+  description = "Network mode of the task definition (awsvpc, bridge, host, or none)"
+  type        = string
+  default     = "bridge"
+}

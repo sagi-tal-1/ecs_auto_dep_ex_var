@@ -12,4 +12,9 @@ resource "aws_nat_gateway" "main" {
   tags = {
     Name = "${var.name_prefix}-nat-gw"
   }
+
+lifecycle {
+    create_before_destroy = true
+  }
+
 }
