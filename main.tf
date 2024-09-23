@@ -39,7 +39,11 @@ resource "local_file" "private_key" {
   file_permission = "0600"
 }
 
-
+resource "local_file" "private_key" {
+  content         = tls_private_key.ssh_key.private_key_pem
+  filename        = "${path.root}/ecs-instance-key.pem"  # Save to the root folder
+  file_permission = "0600"
+}
 
 data "aws_availability_zones" "available" {
   state = "available"
@@ -150,6 +154,8 @@ module "ecs_cluster" {
   cluster_name           = "demo-cluster-${random_id.unique.hex}"
   capacity_provider_name = module.ecs_capacity_provider.capacity_provider_name
   asg_arn                = module.ecs_asg.asg_arn
+
+  depends_on = [module.vpc]
 }
 
 
@@ -188,6 +194,20 @@ module "ecs_launch_template" {
   log_group_name = module.log_group.cloudwatch_log_group_name
   
   
+}
+
+
+data "aws_instances" "ecs_instances" {
+  filter {
+    name   = "instance-state-name"
+    values = ["running"]
+  }
+
+  filter {
+    name   = "tag:aws:autoscaling:groupName"
+    values = [module.ecs_asg.autoscaling_group_name]
+  }
+  depends_on = [module.ecs_asg]
 }
 
 # 12. Scaling Group Module ----------------------- 
@@ -258,6 +278,8 @@ module "ecs_service" {
   security_group_id         = module.ecs_node_sg.security_group_id
   log_group_arn             = module.log_group.cloudwatch_log_group_arn
   cloudwatch_log_group_name = module.log_group.cloudwatch_log_group_name
+
+  depends_on = [module.ecs_cluster]
 }
 # 16. ECS Service auto_scaling  ----------------------- 
   module "ecs_service_auto_scaling" {
