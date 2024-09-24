@@ -43,4 +43,3 @@ variable "log_stream_name" {
   type        = string
   default     = "ecs"
 }
-

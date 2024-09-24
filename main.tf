@@ -35,15 +35,10 @@ resource "aws_key_pair" "generated_key" {
 
 resource "local_file" "private_key" {
   content         = tls_private_key.ssh_key.private_key_pem
-  filename        = "${path.module}/ecs-instance-key.pem"
+  filename        = "${path.cwd}/ecs-instance-key.pem"
   file_permission = "0600"
 }
 
-resource "local_file" "private_key" {
-  content         = tls_private_key.ssh_key.private_key_pem
-  filename        = "${path.root}/ecs-instance-key.pem"  # Save to the root folder
-  file_permission = "0600"
-}
 
 data "aws_availability_zones" "available" {
   state = "available"
@@ -216,7 +211,7 @@ module "ecs_asg" {
   name_prefix        = "demo-ecs-asg-${random_id.unique.hex}"
   subnet_ids         = module.vpc.public_subnet_ids
   min_size           = 1
-  max_size           = 3
+  max_size           = 2
   desired_capacity   = 1
   launch_template_id = module.ecs_launch_template.launch_template_id
   instance_name      = "demo-ecs-instance-${random_id.unique.hex}"
