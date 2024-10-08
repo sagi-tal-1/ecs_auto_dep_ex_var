@@ -12,3 +12,7 @@ output "key_name" {
   description = "The name of the generated key pair for SSH access"
   value       = aws_key_pair.generated_key.key_name
 }
+output "ec2_full_access_policy_arn" {
+  description = "ARN of the EC2 full access policy"
+  value       = module.ecs_node_role.ec2_full_access_policy_arn
+}
