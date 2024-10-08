@@ -15,3 +15,12 @@ output "alb_name" {
 output "security_group_id" {
   value = aws_security_group.http.id
 }
+output "listener" {
+  description = "The ALB listener"
+  value       = aws_lb_listener.http  # Changed from main to http
+}
+
+output "listener_arn" {
+  description = "The ARN of the ALB listener"
+  value       = aws_lb_listener.http.arn  # Changed from main to http
+}

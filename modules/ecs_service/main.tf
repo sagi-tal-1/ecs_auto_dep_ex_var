@@ -3,6 +3,7 @@ resource "aws_ecs_service" "app" {
   cluster         = var.cluster_id
   task_definition = var.task_definition_arn
   desired_count   = 1
+  depends_on = [var.alb_listener_arn]
 
   dynamic "capacity_provider_strategy" {
     for_each = var.capacity_provider_name != "" ? [1] : []
@@ -23,7 +24,8 @@ resource "aws_ecs_service" "app" {
     container_name   = "${var.container_name}-nginx"
     container_port   = var.nginx_port
   }
-
+ 
+ 
   deployment_circuit_breaker {
     enable   = true
     rollback = true
@@ -45,4 +47,5 @@ resource "aws_ecs_service" "app" {
       assign_public_ip = true
     }
   }
+
 }

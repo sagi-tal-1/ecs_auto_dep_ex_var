@@ -12,3 +12,5 @@
      description = "ID of the Elastic IP associated with the NAT Gateway"
      value       = aws_eip.nat.id
    }
+
+ 

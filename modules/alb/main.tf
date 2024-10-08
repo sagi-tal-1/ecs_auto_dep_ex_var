@@ -26,6 +26,12 @@ resource "aws_lb" "main" {
   load_balancer_type = "application"
   subnets            = var.subnet_ids
   security_groups    = [aws_security_group.http.id]
+  
+  enable_deletion_protection = false
+
+  tags = {
+    Name = var.alb_name
+  }
 }
 
 resource "random_id" "target_group_suffix" {

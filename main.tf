@@ -55,14 +55,12 @@ locals {
 module "vpc" {
   source                  = "./modules/vpc"
   name                    = "demo-vpc-${random_id.unique.hex}"
-  name_prefix             = "demo-${random_id.unique.hex}"
+
   cidr_block              = var.vpc_cidr
-  azs_count               = local.azs_count
-  azs_names               = local.azs_names
-  nat_gateway_ids         = [module.nat_gateway.nat_gateway_id]
-  internet_gateway_id     = module.internet_gateway.internet_gateway_id
   availability_zones      = local.azs_names
-  map_public_ip_on_launch = true  # Set to true to allow ECS to manage public IPs
+  existing_vpc_id    = "" 
+
+ 
 }
 
 # 2. Internet Gateway Module
@@ -73,27 +71,31 @@ module "internet_gateway" {
   azs_count   = local.azs_count
   azs_names   = local.azs_names
   create_eips = true  # Set to false when you need to destroy resources
+ 
 }
 
 # 3. NAT Gateway Module
 module "nat_gateway" {
-  source            = "./modules/nat_gateway"
+   source            = "./modules/nat_gateway"
+  name_prefix       = var.name_prefix  // Changed from var.name
+  public_subnet_ids = module.vpc.public_subnet_ids
   vpc_id            = module.vpc.vpc_id
-  public_subnet_ids = [module.vpc.public_subnet_ids[0]]
-  name_prefix       = "demo-${random_id.unique.hex}"
-  az_count          = 1
-  region            = "us-east-1"
+  region            = var.aws_region  // Changed from var.region
+  az_count          = local.azs_count
+
+ 
 }
 
 # 4. Route Table Module
 module "route_table" {
   source              = "./modules/route_table"
   vpc_id              = module.vpc.vpc_id
-  name                = "demo-rt-public-${random_id.unique.hex}"
+  name                = var.name_prefix  // Changed from var.name
   internet_gateway_id = module.internet_gateway.internet_gateway_id
-  subnet_count        = local.azs_count
   subnet_ids          = module.vpc.public_subnet_ids
-  route_table_id      = module.vpc.public_route_table_id
+  private_subnet_ids  = module.vpc.private_subnet_ids
+  availability_zones  = local.azs_names  // Changed from var.availability_zones
+  nat_gateway_id      = module.nat_gateway.nat_gateway_id
 }
 
 #Security -----------------------
@@ -150,7 +152,7 @@ module "ecs_cluster" {
   capacity_provider_name = module.ecs_capacity_provider.capacity_provider_name
   asg_arn                = module.ecs_asg.asg_arn
 
-  depends_on = [module.vpc]
+  depends_on = [module.vpc, module.route_table]
 }
 
 
@@ -246,7 +248,7 @@ module "ecs_task_definition" {
   example_env_value     = "example_value"
   task_role_arn         = module.ecs_node_role.role_arn
   execution_role_arn    = module.ecs_node_role.ecs_exec_role_arn
-  log_region            = module.vpc.region # or the specific region you want to use for logs
+  log_region = var.aws_region  # or the specific region you want to use for logs
   availability_zones  = module.vpc.availability_zones 
   cloudwatch_log_group_arn = module.log_group.cloudwatch_log_group_arn
   cloudwatch_log_group_name = module.log_group.cloudwatch_log_group_name
@@ -273,8 +275,9 @@ module "ecs_service" {
   security_group_id         = module.ecs_node_sg.security_group_id
   log_group_arn             = module.log_group.cloudwatch_log_group_arn
   cloudwatch_log_group_name = module.log_group.cloudwatch_log_group_name
+  alb_listener_arn = module.alb.listener_arn
 
-  depends_on = [module.ecs_cluster]
+  depends_on = [module.ecs_cluster, module.alb]
 }
 # 16. ECS Service auto_scaling  ----------------------- 
   module "ecs_service_auto_scaling" {

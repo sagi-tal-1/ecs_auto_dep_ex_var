@@ -88,3 +88,7 @@ variable "network_mode" {
   type        = string
   default     = "bridge"
 }
+variable "alb_listener_arn" {
+  description = "The ARN of the ALB listener to associate with the ECS service"
+  type        = string
+}
