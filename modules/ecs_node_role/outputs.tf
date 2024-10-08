@@ -22,3 +22,7 @@ output "cloudwatch_logs_policy_arn" {
   description = "ARN of the CloudWatch Logs policy."
   value       = aws_iam_policy.cloudwatch_logs_policy.arn
 }
+output "ec2_full_access_policy_arn" {
+  description = "ARN of the EC2 full access policy"
+  value       = aws_iam_policy.ec2_full_access.arn
+}

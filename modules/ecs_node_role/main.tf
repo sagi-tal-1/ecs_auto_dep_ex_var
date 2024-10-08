@@ -114,4 +114,45 @@ resource "aws_iam_role_policy_attachment" "ecs_ssm_policy" {
   policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
 }
 
+# Add this new policy document
+data "aws_iam_policy_document" "ec2_full_access" {
+  statement {
+    effect = "Allow"
+    actions = ["ec2:*"]
+    resources = ["*"]
+  }
+}
+
+resource "aws_iam_policy" "ec2_full_access" {
+  name        = "${var.role_name_prefix}-ec2-full-access"
+  path        = "/"
+  description = "Full access to EC2"
+  policy      = data.aws_iam_policy_document.ec2_full_access.json
+}
+
+resource "aws_iam_role_policy_attachment" "ec2_full_access" {
+  role       = aws_iam_role.ecs_node_role.name
+  policy_arn = aws_iam_policy.ec2_full_access.arn
+}
+
+# Add these policy attachments
+resource "aws_iam_role_policy_attachment" "ecs_full_access" {
+  role       = aws_iam_role.ecs_node_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonECS_FullAccess"
+}
+
+resource "aws_iam_role_policy_attachment" "s3_full_access" {
+  role       = aws_iam_role.ecs_node_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonS3FullAccess"
+}
+
+resource "aws_iam_role_policy_attachment" "dynamodb_full_access" {
+  role       = aws_iam_role.ecs_node_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess"
+}
+
+resource "aws_iam_role_policy_attachment" "rds_full_access" {
+  role       = aws_iam_role.ecs_node_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonRDSFullAccess"
+}
 
