@@ -5,6 +5,7 @@ resource "aws_ecs_service" "app" {
   desired_count   = var.desired_count
   depends_on      = [var.alb_listener_arn]
 
+
   dynamic "capacity_provider_strategy" {
     for_each = var.capacity_provider_name != "" ? [1] : []
     content {
@@ -24,7 +25,8 @@ resource "aws_ecs_service" "app" {
     container_name   = "${var.container_name}-nginx"
     container_port   = var.nginx_port
   }
-
+ 
+ 
   deployment_circuit_breaker {
     enable   = true
     rollback = true
@@ -45,4 +47,5 @@ resource "aws_ecs_service" "app" {
   placement_constraints {
     type = "distinctInstance"
   }
+
 }

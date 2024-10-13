@@ -1,0 +1,16 @@
+2024-09-26T09:54:48.504+0300 [INFO]  Terraform version: 1.9.5
+2024-09-26T09:54:48.506+0300 [DEBUG] using github.com/hashicorp/go-tfe v1.58.0
+2024-09-26T09:54:48.506+0300 [DEBUG] using github.com/hashicorp/hcl/v2 v2.20.0
+2024-09-26T09:54:48.506+0300 [DEBUG] using github.com/hashicorp/terraform-svchost v0.1.1
+2024-09-26T09:54:48.506+0300 [DEBUG] using github.com/zclconf/go-cty v1.14.4
+2024-09-26T09:54:48.506+0300 [INFO]  Go runtime version: go1.22.5
+2024-09-26T09:54:48.506+0300 [INFO]  CLI args: []string{"terraform", "console"}
+2024-09-26T09:54:48.506+0300 [DEBUG] Attempting to open CLI config file: /Users/sagi/.terraformrc
+2024-09-26T09:54:48.506+0300 [DEBUG] File doesn't exist, but doesn't need to. Ignoring.
+2024-09-26T09:54:48.506+0300 [DEBUG] ignoring non-existing provider search directory terraform.d/plugins
+2024-09-26T09:54:48.506+0300 [DEBUG] ignoring non-existing provider search directory /Users/sagi/.terraform.d/plugins
+2024-09-26T09:54:48.506+0300 [DEBUG] ignoring non-existing provider search directory /Users/sagi/Library/Application Support/io.terraform/plugins
+2024-09-26T09:54:48.506+0300 [DEBUG] ignoring non-existing provider search directory /Library/Application Support/io.terraform/plugins
+2024-09-26T09:54:48.506+0300 [INFO]  CLI command args: []string{"console"}
+2024-09-26T09:54:48.508+0300 [DEBUG] checking for provisioner in "."
+2024-09-26T09:54:48.511+0300 [DEBUG] checking for provisioner in "/opt/homebrew/bin"

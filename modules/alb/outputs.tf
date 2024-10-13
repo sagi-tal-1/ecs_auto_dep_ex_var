@@ -21,3 +21,4 @@ output "listener_arn" {
   description = "The ARN of the ALB listener"
   value       = aws_lb_listener.http.arn
 }
+
