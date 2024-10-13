@@ -258,6 +258,7 @@ module "ecs_service" {
   security_group_id         = module.ecs_node_sg.security_group_id
   log_group_arn             = module.log_group.cloudwatch_log_group_arn
   cloudwatch_log_group_name = module.log_group.cloudwatch_log_group_name
+  alb_listener_arn          = module.alb.listener_arn 
 }
 # 16. ECS Service auto_scaling  ----------------------- 
   module "ecs_service_auto_scaling" {

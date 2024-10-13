@@ -2,7 +2,8 @@ resource "aws_ecs_service" "app" {
   name            = var.service_name
   cluster         = var.cluster_id
   task_definition = var.task_definition_arn
-  desired_count   = 1
+  desired_count   = var.desired_count
+  depends_on      = [var.alb_listener_arn]
 
   dynamic "capacity_provider_strategy" {
     for_each = var.capacity_provider_name != "" ? [1] : []
@@ -37,12 +38,11 @@ resource "aws_ecs_service" "app" {
     ignore_changes = [desired_count]
   }
 
-  dynamic "network_configuration" {
-    for_each = var.network_mode == "awsvpc" ? [1] : []
-    content {
-      security_groups  = [var.security_group_id]
-      subnets          = var.subnet_ids
-      assign_public_ip = true
-    }
+  # Remove the network_configuration block as it's not needed for bridge mode
+  # The dynamic block for network_configuration can be removed
+
+  # Add this to ensure proper task placement
+  placement_constraints {
+    type = "distinctInstance"
   }
 }

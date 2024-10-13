@@ -77,6 +77,7 @@ variable "nginx_port" {
   description = "Port number for Nginx container"
   type        = number
 }
+
 variable "retention_in_days" {
   description = "Retention period for the CloudWatch Log Group (in days)"
   type        = number
@@ -87,4 +88,10 @@ variable "network_mode" {
   description = "Network mode of the task definition (awsvpc, bridge, host, or none)"
   type        = string
   default     = "bridge"
+}
+
+# Add the missing alb_listener_arn variable
+variable "alb_listener_arn" {
+  description = "ARN of the ALB listener"
+  type        = string
 }

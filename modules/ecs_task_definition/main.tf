@@ -18,7 +18,7 @@ resource "aws_ecs_task_definition" "app" {
       portMappings = [
         {
           containerPort = var.nginx_port
-          hostPort      = var.nginx_port
+          hostPort      = 0  # Changed to 0 for dynamic port mapping
           protocol      = "tcp"
         }
       ]
@@ -53,7 +53,7 @@ resource "aws_ecs_task_definition" "app" {
       portMappings = [
         {
           containerPort = var.node_port
-          hostPort      = var.node_port
+          hostPort      = 0  # Changed to 0 for dynamic port mapping
           protocol      = "tcp"
         }
       ]

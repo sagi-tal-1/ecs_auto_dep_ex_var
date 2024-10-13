@@ -34,7 +34,7 @@ resource "random_id" "target_group_suffix" {
 
 resource "aws_lb_target_group" "app" {
   name        = substr("app-${var.name_prefix}-${random_id.target_group_suffix.hex}", 0, 32)
-   port        = var.nginx_port
+  port        = var.nginx_port
   protocol    = "HTTP"
   vpc_id      = var.vpc_id
   target_type = "instance"
@@ -46,6 +46,13 @@ resource "aws_lb_target_group" "app" {
     timeout             = 60
     interval            = 300
     matcher             = "200,301,302"
+  }
+
+  # Add this stickiness block for better session management with dynamic ports
+  stickiness {
+    type            = "lb_cookie"
+    cookie_duration = 86400
+    enabled         = true
   }
 }
 
@@ -59,5 +66,3 @@ resource "aws_lb_listener" "http" {
     target_group_arn = aws_lb_target_group.app.arn
   }
 }
-
-
