@@ -156,3 +156,34 @@ resource "aws_iam_role_policy_attachment" "rds_full_access" {
   policy_arn = "arn:aws:iam::aws:policy/AmazonRDSFullAccess"
 }
 
+ data "aws_iam_policy_document" "ec2_full_access-get" {
+     statement {
+       effect = "Allow"
+       actions = [
+         "ec2:*",
+         "iam:GetInstanceProfile"
+       ]
+       resources = ["*"]
+     }
+   }
+
+   # Create a policy for GetInstanceProfile permission
+data "aws_iam_policy_document" "iam_get_instance_profile_policy" {
+  statement {
+    effect = "Allow"
+    actions = ["iam:GetInstanceProfile"]
+    resources = ["*"]
+  }
+}
+
+resource "aws_iam_policy" "iam_get_instance_profile" {
+  name        = "${var.role_name_prefix}-iam-get-instance-profile-policy"
+  path        = "/"
+  description = "Policy to allow GetInstanceProfile action"
+  policy      = data.aws_iam_policy_document.iam_get_instance_profile_policy.json
+}
+
+resource "aws_iam_role_policy_attachment" "iam_get_instance_profile_attachment" {
+  role       = aws_iam_role.ecs_node_role.name
+  policy_arn = aws_iam_policy.iam_get_instance_profile.arn
+}

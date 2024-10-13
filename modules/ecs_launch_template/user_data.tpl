@@ -126,14 +126,6 @@ systemctl restart docker
 check_status "Docker log rotation configuration"
 check_file "/etc/docker/daemon.json"
 
-# Configure and start SSM agent (if not already running)
-echo "Ensuring SSM agent is configured and running..."
-if ! systemctl is-active --quiet amazon-ssm-agent; then
-    systemctl enable amazon-ssm-agent
-    systemctl start amazon-ssm-agent
-fi
-check_service "amazon-ssm-agent"
-
 # Configure CloudWatch agent
 echo "Configuring CloudWatch agent..."
 cat > /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json << EOF
@@ -275,3 +267,46 @@ else
     echo "ERROR: User-data script encountered issues"
     exit 1
 fi
+
+# Verify network connectivity before starting ECS agent
+echo "Verifying network connectivity..."
+if ping -c 3 amazon.com &> /dev/null; then
+    echo "SUCCESS: Network is reachable, proceeding with ECS agent start"
+    systemctl start ecs-agent
+    check_service "ecs-agent"
+else
+    echo "ERROR: Network is not reachable, ECS agent will not be started manually"
+    echo "The systemd service will keep trying to start the ECS agent once network is available"
+fi
+
+# Set up ECS agent systemd service
+echo "Setting up ECS agent systemd service..."
+cat << EOF > /etc/systemd/system/ecs-agent.service
+[Unit]
+Description=Amazon ECS Agent
+After=docker.service network-online.target
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=simple
+ExecStartPre=/bin/bash -c "until ping -c1 amazon.com &>/dev/null; do echo 'Waiting for network...'; sleep 1; done"
+ExecStartPre=/bin/bash -c "if [ -f '/var/lib/ecs/data/ecs_agent_data.json' ]; then rm /var/lib/ecs/data/ecs_agent_data.json; fi"
+ExecStart=/usr/bin/docker run --name ecs-agent \
+          --privileged \
+          --restart=on-failure:10 \
+          --volume=/var/run:/var/run \
+          --volume=/var/log/ecs:/log \
+          --volume=/var/lib/ecs/data:/data \
+          --volume=/etc/ecs:/etc/ecs \
+          --net=host \
+          --env-file=/etc/ecs/ecs.config \
+          amazon/amazon-ecs-agent:latest
+ExecStop=/usr/bin/docker stop ecs-agent
+Restart=always
+RestartSec=30s
+
+[Install]
+WantedBy=multi-user.target
+EOF
+check_status "ECS agent systemd service setup"
