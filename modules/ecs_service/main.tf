@@ -19,7 +19,11 @@ resource "aws_ecs_service" "app" {
     type  = "spread"
     field = "instanceId"
   }
-
+network_configuration {
+    security_groups = [var.security_group_id]
+    subnets         = var.subnet_ids
+  }
+  
   load_balancer {
     target_group_arn = var.target_group_arn
     container_name   = "${var.container_name}-nginx"
@@ -40,8 +44,7 @@ resource "aws_ecs_service" "app" {
     ignore_changes = [desired_count]
   }
 
-  # Remove the network_configuration block as it's not needed for bridge mode
-  # The dynamic block for network_configuration can be removed
+
 
   # Add this to ensure proper task placement
   placement_constraints {

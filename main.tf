@@ -183,10 +183,11 @@ module "ecs_launch_template" {
   source                   = "./modules/ecs_launch_template"
   name_prefix              = "demo-ecs-ec2-${random_id.unique.hex}"
   key_name                 = aws_key_pair.generated_key.key_name
-  ami_id                   = "ami-05dc81a6311c42a6e"
+  ami_id                   = data.aws_ami.ecs_optimized.id
+  # "ami-05dc81a6311c42a6e"
   instance_type            = "t2.micro"
   security_group_id        = module.ecs_node_sg.security_group_id
-  iam_instance_profile_arn = module.ecs_node_role.instance_profile_arn
+  iam_instance_profile_arn = module.ecs_node_role.ecs_instance_profile_arn
   cluster_name             = module.ecs_cluster.cluster_name
   log_group_name = module.log_group.cloudwatch_log_group_name
   
@@ -246,8 +247,8 @@ module "ecs_task_definition" {
   nginx_port            = 80
   node_port             = 3000
   example_env_value     = "example_value"
-  task_role_arn         = module.ecs_node_role.role_arn
-  execution_role_arn    = module.ecs_node_role.ecs_exec_role_arn
+  task_role_arn      = module.ecs_task_role.task_role_arn
+  execution_role_arn = module.ecs_task_role.execution_role_arn
   log_region = var.aws_region  # or the specific region you want to use for logs
   availability_zones  = module.vpc.availability_zones 
   cloudwatch_log_group_arn = module.log_group.cloudwatch_log_group_arn

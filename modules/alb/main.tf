@@ -45,14 +45,14 @@ resource "aws_lb_target_group" "app" {
   vpc_id      = var.vpc_id
   target_type = "instance"
 
-  health_check {
-    path                = "/"
-    healthy_threshold   = 2
-    unhealthy_threshold = 10
-    timeout             = 60
-    interval            = 300
-    matcher             = "200,301,302"
-  }
+   health_check {
+       path                = "/"
+       healthy_threshold   = 2
+       unhealthy_threshold = 10
+       timeout             = 30
+       interval            = 60
+       matcher             = "200,301,302"
+     }
 
   # Add this stickiness block for better session management with dynamic ports
   stickiness {

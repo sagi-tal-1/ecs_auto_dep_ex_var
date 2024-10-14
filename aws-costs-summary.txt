@@ -1,0 +1,9 @@
+Service, Blended Cost (USD)
+EC2 - Other, 10.37
+Amazon Elastic Compute Cloud - Compute, 2.85
+Amazon Elastic Load Balancing, 1.65
+Amazon Simple Notification Service, 0.00
+Amazon Simple Storage Service, 0.000005
+Amazon Virtual Private Cloud, 1.98
+Amazon CloudWatch, 0.00
+Tax, 2.87

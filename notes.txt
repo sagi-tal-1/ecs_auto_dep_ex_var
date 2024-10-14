@@ -515,7 +515,28 @@ terraform init
 After completing these steps, your Terraform working directory will be reset, and you can proceed with configuring your infrastructure from scratch.
 
 
+checking usege 
 
+(base) sagi@sagis-MacBook-Pro ecs_auto_deployment- % aws ec2 describe-instances --query 'Reservations[*].Instances[*].[InstanceId, State.Name]' --output table
 
+---------------------------------------
+|          DescribeInstances          |
++----------------------+--------------+
+|  i-04f0419aa1b29772d |  terminated  |
++----------------------+--------------+
+(base) sagi@sagis-MacBook-Pro ecs_auto_deployment- % aws ec2 describe-volumes --query 'Volumes[*].[VolumeId, State, Size, Attachments]' --output table
 
+(base) sagi@sagis-MacBook-Pro ecs_auto_deployment- % aws ec2 describe-addresses --query 'Addresses[*].[PublicIp, InstanceId, AllocationId]' --output table
+
+(base) sagi@sagis-MacBook-Pro ecs_auto_deployment- % aws elbv2 describe-load-balancers --output table
+
+-----------------------
+|DescribeLoadBalancers|
++---------------------+
+(base) sagi@sagis-MacBook-Pro ecs_auto_deployment- % aws autoscaling describe-auto-scaling-groups --output table
+
+---------------------------
+|DescribeAutoScalingGroups|
++-------------------------+
+(base) sagi@sagis-MacBook-Pro ecs_auto_deployment- % 
 

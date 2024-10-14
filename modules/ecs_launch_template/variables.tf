@@ -43,3 +43,27 @@ variable "log_stream_name" {
   type        = string
   default     = "ecs"
 }
+
+variable "root_volume_size" {
+  description = "The size of the root volume in GB"
+  type        = number
+  default     = 30
+}
+
+variable "root_volume_type" {
+  description = "The type of the root volume (gp2, gp3, io1, etc.)"
+  type        = string
+  default     = "gp3"
+}
+
+variable "additional_user_data" {
+  description = "Additional user data script to run on instance launch"
+  type        = string
+  default     = ""
+}
+
+variable "tags" {
+  description = "A map of tags to add to the launch template"
+  type        = map(string)
+  default     = {}
+}
