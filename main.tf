@@ -12,8 +12,8 @@ terraform {
 }
 
 provider "aws" {
-  region     = "us-east-1"
-  retry_mode = "standard"
+  region      = "us-east-1"
+  retry_mode  = "standard"
   max_retries = 3
 }
 
@@ -50,17 +50,20 @@ data "aws_availability_zones" "available" {
 locals {
   azs_count = 2
   azs_names = slice(data.aws_availability_zones.available.names, 0, 2)
+
+  # Added capacity_provider_name declaration
+  capacity_provider_name = "demo-capacity-provider-${random_id.unique.hex}"
 }
 
 module "vpc" {
-  source                  = "./modules/vpc"
-  name                    = "demo-vpc-${random_id.unique.hex}"
+  source = "./modules/vpc"
+  name   = "demo-vpc-${random_id.unique.hex}"
 
-  cidr_block              = var.vpc_cidr
-  availability_zones      = local.azs_names
-  existing_vpc_id    = "" 
+  cidr_block         = var.vpc_cidr
+  availability_zones = local.azs_names
+  existing_vpc_id    = ""
 
- 
+
 }
 
 # 2. Internet Gateway Module
@@ -70,31 +73,31 @@ module "internet_gateway" {
   name        = "demo-igw-${random_id.unique.hex}"
   azs_count   = local.azs_count
   azs_names   = local.azs_names
-  create_eips = true  # Set to false when you need to destroy resources
- 
+  create_eips = true # Set to false when you need to destroy resources
+
 }
 
 # 3. NAT Gateway Module
 module "nat_gateway" {
-   source            = "./modules/nat_gateway"
-  name_prefix       = var.name_prefix  // Changed from var.name
+  source            = "./modules/nat_gateway"
+  name_prefix       = var.name_prefix // Changed from var.name
   public_subnet_ids = module.vpc.public_subnet_ids
   vpc_id            = module.vpc.vpc_id
-  region            = var.aws_region  // Changed from var.region
+  region            = var.aws_region // Changed from var.region
   az_count          = local.azs_count
 
- 
+
 }
 
 # 4. Route Table Module
 module "route_table" {
   source              = "./modules/route_table"
   vpc_id              = module.vpc.vpc_id
-  name                = var.name_prefix  // Changed from var.name
+  name                = var.name_prefix // Changed from var.name
   internet_gateway_id = module.internet_gateway.internet_gateway_id
   subnet_ids          = module.vpc.public_subnet_ids
   private_subnet_ids  = module.vpc.private_subnet_ids
-  availability_zones  = local.azs_names  // Changed from var.availability_zones
+  availability_zones  = local.azs_names // Changed from var.availability_zones
   nat_gateway_id      = module.nat_gateway.nat_gateway_id
 }
 
@@ -145,14 +148,14 @@ module "log_group" {
 
 # ECS Cluster and related resources ----------------------- 
 # 10. ECS Cluster Module
-module "ecs_cluster" {
-  source                 = "./modules/ecs_cluster"
-  name_prefix            = "demo-${random_id.unique.hex}"
-  cluster_name           = "demo-cluster-${random_id.unique.hex}"
-  capacity_provider_name = module.ecs_capacity_provider.capacity_provider_name
-  asg_arn                = module.ecs_asg.asg_arn
 
-  depends_on = [module.vpc, module.route_table]
+module "ecs_cluster" {
+  source       = "./modules/ecs_cluster"
+  name_prefix  = "demo-${random_id.unique.hex}"
+  cluster_name = "demo-cluster-${random_id.unique.hex}"
+  asg_arn = module.ecs_asg.asg_arn
+
+  depends_on = [module.vpc]
 }
 
 
@@ -168,7 +171,7 @@ data "aws_ami" "ecs_optimized" {
 
   filter {
     name   = "owner-id"
-    values = ["591542846629"]  # AWS ECS Optimized AMI account owner ID
+    values = ["591542846629"] # AWS ECS Optimized AMI account owner ID
   }
 
   filter {
@@ -176,25 +179,26 @@ data "aws_ami" "ecs_optimized" {
     values = ["hvm"]
   }
 
-  owners = ["591542846629"]  # Amazon ECS AMI official owner
+  owners = ["591542846629"] # Amazon ECS AMI official owner
 }
 
+
 module "ecs_launch_template" {
-  source                   = "./modules/ecs_launch_template"
-  name_prefix              = "demo-ecs-ec2-${random_id.unique.hex}"
-  key_name                 = aws_key_pair.generated_key.key_name
-  ami_id                   = data.aws_ami.ecs_optimized.id
+  source      = "./modules/ecs_launch_template"
+  name_prefix = "demo-ecs-ec2-${random_id.unique.hex}"
+  key_name    = aws_key_pair.generated_key.key_name
+  ami_id      = data.aws_ami.ecs_optimized.id
   # "ami-05dc81a6311c42a6e"
   instance_type            = "t2.micro"
   security_group_id        = module.ecs_node_sg.security_group_id
   iam_instance_profile_arn = module.ecs_node_role.ecs_instance_profile_arn
   cluster_name             = module.ecs_cluster.cluster_name
-  log_group_name = module.log_group.cloudwatch_log_group_name
-  
-  
+  log_group_name           = module.log_group.cloudwatch_log_group_name
+  dockerhub_username       = local.dockerhub_credentials.username
+  dockerhub_password       = local.dockerhub_credentials.password
+
+
 }
-
-
 data "aws_instances" "ecs_instances" {
   filter {
     name   = "instance-state-name"
@@ -207,6 +211,8 @@ data "aws_instances" "ecs_instances" {
   }
   depends_on = [module.ecs_asg]
 }
+#-------------------------------------------------
+
 
 # 12. Scaling Group Module ----------------------- 
 module "ecs_asg" {
@@ -218,50 +224,98 @@ module "ecs_asg" {
   desired_capacity   = 1
   launch_template_id = module.ecs_launch_template.launch_template_id
   instance_name      = "demo-ecs-instance-${random_id.unique.hex}"
+ 
+  
+  depends_on = [module.ecs_launch_template]
+
 }
 
-# 13. ecs_capacity_provider Module ----------------------- 
+
+
+#----------------------------------------------------------
+data "aws_ecs_cluster" "this" {
+  cluster_name = module.ecs_cluster.cluster_name
+  depends_on   = [module.ecs_cluster]
+}
+
+# 13. ecs_capacity_provider Module -----------------------
 module "ecs_capacity_provider" {
   source                 = "./modules/ecs_capacity_provider"
-  capacity_provider_name = "demo-capacity-provider-${random_id.unique.hex}"
+  capacity_provider_name = local.capacity_provider_name
   asg_arn                = module.ecs_asg.asg_arn
-  cluster_name           = module.ecs_cluster.cluster_name
+  # Fixd cluster_name ref to data
+  cluster_name = data.aws_ecs_cluster.this.cluster_name
 
-  weight                 = 100
-  max_scaling_step_size  = 1
-  min_scaling_step_size  = 1
-  target_capacity        = 100
-  base_capacity          = 1
+  weight                = 100
+  max_scaling_step_size = 1
+  min_scaling_step_size = 1
+  target_capacity       = 100
+  base_capacity         = 1
+
+ depends_on = [module.ecs_asg, module.ecs_cluster]
 
 }
 
-# 14. ECS Task Definition Module ----------------------- 
+# 14. ECS Task Definition Module -----------------------
+locals {
+  dockerhub_credentials = jsondecode(file("${path.module}/dockerhub_credentials.json"))
+}
+
 module "ecs_task_definition" {
-  source                = "./modules/ecs_task_definition"
-  family                = "nginx-task-${random_id.unique.hex}"
-  container_name        = "nginx"
-  log_group_name        = module.log_group.cloudwatch_log_group_name
-  log_stream_prefix     = "ecs"
-  cpu                   = 256
-  memory                = 256
-  nginx_port            = 80
-  node_port             = 3000
-  example_env_value     = "example_value"
-  task_role_arn      = module.ecs_task_role.task_role_arn
-  execution_role_arn = module.ecs_task_role.execution_role_arn
-  log_region = var.aws_region  # or the specific region you want to use for logs
-  availability_zones  = module.vpc.availability_zones 
-  cloudwatch_log_group_arn = module.log_group.cloudwatch_log_group_arn
+  source                    = "./modules/ecs_task_definition"
+  family                    = "nginx-task-${random_id.unique.hex}"
+  container_name            = "nginx"
+  docker_image              = "nginx:latest"
+  log_group_name            = module.log_group.cloudwatch_log_group_name
+  log_stream_prefix         = "ecs"
+  cpu                       = 256
+  memory                    = 512
+  nginx_port                = 80
+  task_role_arn             = module.ecs_task_role.task_role_arn
+  execution_role_arn        = module.ecs_task_role.execution_role_arn
+  log_region                = var.aws_region
   cloudwatch_log_group_name = module.log_group.cloudwatch_log_group_name
+  cloudwatch_log_group_arn  = module.log_group.cloudwatch_log_group_arn
 
-  depends_on = [module.log_group, ]
+  # Remove these lines as they're not needed for a simple Nginx container
+  node_port          = 3000
+  availability_zones = module.vpc.availability_zones
+  example_env_value  = "example_value"
+
+  depends_on = [module.log_group]
+}
+resource "null_resource" "docker_login" {
+  provisioner "local-exec" {
+    command = "docker login -u ${local.dockerhub_credentials.username} -p ${local.dockerhub_credentials.password}"
+  }
 }
 
-# 15. ECS Service Module ----------------------- 
+# module "ecs_task_definition" {
+#   source                = "./modules/ecs_task_definition"
+#   family                = "nginx-task-${random_id.unique.hex}"
+#   container_name        = "nginx"
+#   log_group_name        = module.log_group.cloudwatch_log_group_name
+#   log_stream_prefix     = "ecs"
+#   cpu                   = 256
+#   memory                = 256
+#   nginx_port            = 80
+#   node_port             = 3000
+#   example_env_value     = "example_value"
+#   task_role_arn      = module.ecs_task_role.task_role_arn
+#   execution_role_arn = module.ecs_task_role.execution_role_arn
+#   log_region = var.aws_region  # or the specific region you want to use for logs
+#   availability_zones  = module.vpc.availability_zones 
+#   cloudwatch_log_group_arn = module.log_group.cloudwatch_log_group_arn
+#   cloudwatch_log_group_name = module.log_group.cloudwatch_log_group_name
+
+#   depends_on = [module.log_group, ]
+# }
+
+# 15. ECS Service Module -----------------------
 module "ecs_service" {
   source                    = "./modules/ecs_service"
   name_prefix               = var.name_prefix
-  service_name              = "${var.name_prefix}-ecs-service-${random_id.unique.hex}"    
+  service_name              = "${var.name_prefix}-ecs-service-${random_id.unique.hex}"
   cluster_id                = module.ecs_cluster.cluster_id
   ecs_cluster_id            = module.ecs_cluster.ecs_cluster_id
   task_definition_arn       = module.ecs_task_definition.task_definition_arn
@@ -276,12 +330,16 @@ module "ecs_service" {
   security_group_id         = module.ecs_node_sg.security_group_id
   log_group_arn             = module.log_group.cloudwatch_log_group_arn
   cloudwatch_log_group_name = module.log_group.cloudwatch_log_group_name
-  alb_listener_arn = module.alb.listener_arn
+  alb_listener_arn          = module.alb.listener_arn
+
+  depends_on = [module.ecs_capacity_provider,
+    module.ecs_cluster]
 
 }
 # 16. ECS Service auto_scaling  ----------------------- 
-  module "ecs_service_auto_scaling" {
-  source = "./modules/ecs_service_auto_scaling"
+module "ecs_service_auto_scaling" {
+  source  = "./modules/ecs_service_auto_scaling"
+  asg_arn = module.ecs_asg.asg_arn
 
   cluster_name        = module.ecs_cluster.cluster_name
   service_name        = module.ecs_service.service_name
@@ -290,30 +348,87 @@ module "ecs_service" {
   target_cpu_value    = 80
   target_memory_value = 80
 
- depends_on = [module.ecs_service]
-
-}
-
-resource "null_resource" "drain_ecs_cluster" {
-  triggers = {
-    cluster_name = module.ecs_cluster.cluster_name
-  }
-
-  provisioner "local-exec" {
-    when    = destroy
-    command = <<EOF
-      aws ecs list-services --cluster ${self.triggers.cluster_name} --output text --query 'serviceArns[]' | \
-      xargs -I {} aws ecs update-service --cluster ${self.triggers.cluster_name} --service {} --desired-count 0
-      sleep 60
-      aws ecs list-container-instances --cluster ${self.triggers.cluster_name} --output text --query 'containerInstanceArns[]' | \
-      xargs -I {} aws ecs deregister-container-instance --cluster ${self.triggers.cluster_name} --container-instance {} --force
-      sleep 30
-    EOF
-  }
-
   depends_on = [module.ecs_service]
+
+}
+#V2 cleanup
+# Cleanup Logic -----------------------
+resource "null_resource" "cleanup" {
+  provisioner "local-exec" {
+    command = <<EOT
+      #!/bin/bash
+      aws ecs delete-cluster --cluster ${module.ecs_cluster.cluster_name}
+      aws logs delete-log-group --log-group-name ${module.log_group.cloudwatch_log_group_name}
+    EOT
+
+    environment = {
+      AWS_DEFAULT_REGION = "us-east-1"
+    }
+  }
+
+  depends_on = [module.ecs_service, module.ecs_capacity_provider, module.ecs_cluster]
 }
 
+
+
+
+
+
+
+
+
+# V1 clean up 
+# resource "null_resource" "ecs_cleanup" {
+#   triggers = {
+#     cluster_name = module.ecs_cluster.cluster_name
+#     region       = var.aws_region
+
+#   }
+
+#   provisioner "local-exec" {
+#     when    = destroy
+#     command = <<EOF
+# #!/bin/bash
+# set -e
+
+# CLUSTER_NAME=${self.triggers.cluster_name}
+# REGION=${self.triggers.region}
+
+# echo "Cleaning up ECS cluster: $CLUSTER_NAME"
+
+# # Update all services to have 0 desired count
+# for service in $(aws ecs list-services --cluster $CLUSTER_NAME --region $REGION --output text --query 'serviceArns[]'); do
+#   aws ecs update-service --cluster $CLUSTER_NAME --service $(basename $service) --desired-count 0 --region $REGION
+# done
+
+# # Wait for all tasks to stop
+# aws ecs wait services-inactive --cluster $CLUSTER_NAME --services $(aws ecs list-services --cluster $CLUSTER_NAME --region $REGION --output text --query 'serviceArns[]') --region $REGION
+
+# # Delete all services
+# for service in $(aws ecs list-services --cluster $CLUSTER_NAME --region $REGION --output text --query 'serviceArns[]'); do
+#   aws ecs delete-service --cluster $CLUSTER_NAME --service $(basename $service) --force --region $REGION
+# done
+
+# # Deregister all task definitions
+# for task_def in $(aws ecs list-task-definitions --family-prefix $CLUSTER_NAME --region $REGION --output text --query 'taskDefinitionArns[]'); do
+#   aws ecs deregister-task-definition --task-definition $task_def --region $REGION
+# done
+
+# # Deregister all container instances
+# for instance in $(aws ecs list-container-instances --cluster $CLUSTER_NAME --region $REGION --output text --query 'containerInstanceArns[]'); do
+#   aws ecs deregister-container-instance --cluster $CLUSTER_NAME --container-instance $(basename $instance) --force --region $REGION
+# done
+
+# # Remove all capacity providers
+# aws ecs put-cluster-capacity-providers --cluster $CLUSTER_NAME --capacity-providers [] --default-capacity-provider-strategy [] --region $REGION
+
+# echo "ECS cleanup completed"
+# EOF
+#   }
+
+#   depends_on = [module.ecs_service, module.ecs_capacity_provider, module.ecs_cluster]
+
+# }
 
 
 

@@ -540,3 +540,8 @@ checking usege
 +-------------------------+
 (base) sagi@sagis-MacBook-Pro ecs_auto_deployment- % 
 
+   __|  __|  __|
+   _|  (   \__ \   Amazon Linux 2 (ECS Optimized)
+ ____|\___|____/
+
+For documentation, visit http://aws.amazon.com/documentation/ecs

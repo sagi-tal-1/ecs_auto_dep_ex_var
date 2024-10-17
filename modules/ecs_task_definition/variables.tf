@@ -80,3 +80,10 @@ variable "cloudwatch_log_group_name" {
   description = "ARN of the CloudWatch Log Group"
   type        = string
 }
+
+variable "docker_image" {
+     description = "The Docker image to use for the container"
+     type        = string
+   }
+
+

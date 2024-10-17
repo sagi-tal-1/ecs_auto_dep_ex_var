@@ -22,3 +22,7 @@ output "memory_policy_name" {
   description = "Name of the Memory target tracking scaling policy"
   value       = aws_appautoscaling_policy.ecs_target_memory.name
 }
+output "asg_arn" {
+     value       = var.asg_arn
+     description = "The ARN of the Auto Scaling Group"
+   }

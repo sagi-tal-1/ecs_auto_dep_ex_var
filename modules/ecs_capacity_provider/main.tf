@@ -18,11 +18,12 @@ resource "aws_ecs_capacity_provider" "main" {
 
 resource "aws_ecs_cluster_capacity_providers" "main" {
   cluster_name = var.cluster_name
-  capacity_providers = [aws_ecs_capacity_provider.main.name]
+  capacity_providers = [aws_ecs_capacity_provider.main.name]  # Fixed reference to the created capacity provider
+
 
   default_capacity_provider_strategy {
     base              = var.base_capacity
     weight            = var.weight
-    capacity_provider = aws_ecs_capacity_provider.main.name
+    capacity_provider = aws_ecs_capacity_provider.main.name  # Fixed reference here as well
   }
 }

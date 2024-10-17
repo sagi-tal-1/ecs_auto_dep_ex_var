@@ -1,7 +1,7 @@
 variable "capacity_provider_name" {
   description = "The name of the capacity provider for the ECS service"
   type        = string
-  default     = "demo-ecs-ec2"  # Add a default value if appropriate
+  default     = "demo-ecs-ec2" # Add a default value if appropriate
 }
 # variable "target_group_arn" {
 #   description = "The ARN of the target group to associate with the ECS service"
@@ -47,7 +47,7 @@ variable "example_env_value" {
 variable "aws_region" {
   description = "The AWS region to deploy resources"
   type        = string
-  default     = "us-east-1"  # Change this to your desired region
+  default     = "us-east-1" # Change this to your desired region
 }
 
 variable "existing_vpc_id" {
@@ -92,6 +92,6 @@ variable "cloudwatch_logs_retention_days" {
 variable "name_prefix" {
   description = "Prefix for resource names"
   type        = string
-  default     = "demo"  # You can change this default value
+  default     = "demo" # You can change this default value
 }
 

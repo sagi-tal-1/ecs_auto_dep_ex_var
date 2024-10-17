@@ -6,6 +6,7 @@ variable "capacity_provider_name" {
 variable "asg_arn" {
   type        = string
   description = "ARN of the Auto Scaling Group"
+  
 }
 
 variable "cluster_name" {

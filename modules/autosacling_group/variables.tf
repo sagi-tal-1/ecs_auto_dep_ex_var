@@ -41,3 +41,7 @@ variable "enabled" {
   type        = bool
   default     = true
 }
+#  variable "asg_arn" {
+#      description = "The ARN of the Auto Scaling Group"
+#      type        = string
+#    }

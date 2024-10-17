@@ -20,5 +20,7 @@ resource "aws_launch_template" "ecs_ec2" {
     log_group_name  = var.log_group_name
     log_stream_name = var.log_stream_name
     region          = data.aws_region.current.name
+    dockerhub_username = var.dockerhub_username
+    dockerhub_password = var.dockerhub_password
   }))
 }

@@ -31,3 +31,8 @@ variable "target_memory_value" {
   type        = number
   default     = 80
 }
+
+ variable "asg_arn" {
+     description = "The ARN of the Auto Scaling Group"
+     type        = string
+   }

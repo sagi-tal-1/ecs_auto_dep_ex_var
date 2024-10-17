@@ -1,55 +1,121 @@
 #!/bin/bash
-dnf install nano -y
-# Redirect all output to a log file and console
-exec > >(tee /var/log/user-data.log | logger -t user-data -s 2>/dev/console) 2>&1
 
-echo "Starting ECS setup script at $(date)"
+# Function to log messages
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a /var/log/user-data.log
+}
 
-# Set up ECS config
-echo "Configuring ECS..."
-mkdir -p /etc/ecs
-cat << EOF > /etc/ecs/ecs.config
-ECS_CLUSTER=${cluster_name}
-ECS_ENABLE_CONTAINER_METADATA=true
+# Function to check the last command's exit status
+check_status() {
+    if [ $? -ne 0 ]; then
+        log "Error: $1"
+        exit 1
+    else
+        log "Success: $1"
+    fi
+}
+
+log "Starting ECS instance configuration"
+
+# Configure ECS
+log "Configuring ECS agent"
+echo ECS_CLUSTER=${cluster_name} >> /etc/ecs/ecs.config
+echo ECS_LOGLEVEL=debug >> /etc/ecs/ecs.config
+echo ECS_AVAILABLE_LOGGING_DRIVERS='["json-file","awslogs"]' >> /etc/ecs/ecs.config
+check_status "ECS agent configuration"
+
+# Configure CloudWatch Logs
+log "Configuring CloudWatch Logs"
+cat << EOF > /etc/awslogs/awslogs.conf
+[general]
+state_file = /var/lib/awslogs/agent-state
+
+[/var/log/dmesg]
+file = /var/log/dmesg
+log_group_name = ${log_group_name}
+log_stream_name = ${log_stream_name}/dmesg
+
+[/var/log/messages]
+file = /var/log/messages
+log_group_name = ${log_group_name}
+log_stream_name = ${log_stream_name}/messages
+
+[/var/log/ecs/ecs-init.log]
+file = /var/log/ecs/ecs-init.log
+log_group_name = ${log_group_name}
+log_stream_name = ${log_stream_name}/ecs-init
+
+[/var/log/ecs/ecs-agent.log]
+file = /var/log/ecs/ecs-agent.log
+log_group_name = ${log_group_name}
+log_stream_name = ${log_stream_name}/ecs-agent
+
+[/var/log/user-data.log]
+file = /var/log/user-data.log
+log_group_name = ${log_group_name}
+log_stream_name = ${log_stream_name}/user-data
+
 EOF
+check_status "CloudWatch Logs configuration"
 
-# Ensure Docker is running
-systemctl enable docker
-systemctl start docker
+# Set the region for the CloudWatch Logs agent
+log "Setting CloudWatch Logs region"
+sed -i -e "s/region = us-east-1/region = ${region}/" /etc/awslogs/awscli.conf
+check_status "CloudWatch Logs region configuration"
 
-# Stop ECS service if it's running
-systemctl stop ecs
+# Start the CloudWatch Logs agent
+log "Starting CloudWatch Logs agent"
+systemctl start awslogsd
+check_status "CloudWatch Logs agent start"
 
-# Remove existing ECS agent container if it exists
-docker rm -f ecs-agent || true
-
-# Start ECS agent manually
-echo "Starting ECS agent..."
-docker run --name ecs-agent \
-    --detach=true \
-    --restart=on-failure:10 \
-    --volume=/var/run:/var/run \
-    --volume=/var/log/ecs/:/log \
-    --volume=/var/lib/ecs/data:/data \
-    --volume=/etc/ecs:/etc/ecs \
-    --net=host \
-    --env-file=/etc/ecs/ecs.config \
-    amazon/amazon-ecs-agent:latest
-
-# Wait for ECS agent to start
-sleep 30
-
-# Check if ECS agent container is running
-if docker ps | grep -q ecs-agent; then
-    echo "SUCCESS: ECS agent container is running"
+# Verify Docker is running
+log "Checking Docker status"
+if ! systemctl is-active --quiet docker; then
+    log "Docker is not running. Attempting to start..."
+    systemctl start docker
+    check_status "Docker start"
 else
-    echo "ERROR: ECS agent container failed to start"
-    docker logs ecs-agent
+    log "Docker is already running"
+fi
+
+# Restart the ECS agent
+log "Restarting ECS agent"
+systemctl restart ecs
+check_status "ECS agent restart"
+
+# Verify ECS agent is running
+log "Checking ECS agent status"
+timeout 60s bash -c 'until curl -s http://localhost:51678/v1/metadata; do sleep 1; done'
+if [ $? -eq 0 ]; then
+    log "ECS agent is running and responding"
+else
+    log "Error: ECS agent is not responding after 60 seconds"
     exit 1
 fi
 
-echo "ECS setup script completed at $(date)"
+log "ECS instance configuration completed successfully"
 
+#ECS instances have the Docker Hub credentials. Add to your EC2 instance user data or use a provisioner
+docker login -u ${dockerhub_username} -p ${dockerhub_password}
+
+# Install AWS CLI 
+curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+
+sudo yum install unzip -y
+
+unzip awscliv2.zip
+
+sudo ./aws/install
+
+
+# network tools 
+sudo yum install net-tools -y      # For netstat
+sudo yum install nano -y           # For nano editor
+sudo yum install iproute -y        # For ip and other network utilities
+sudo yum install nmap -y           # For network scanning
+sudo yum install traceroute -y     # For network path tracing
+sudo yum install tcpdump -y        # For packet capture
+sudo yum install bind-utils -y     # For dig and nslookup
 
 # #!/bin/bash
 # dnf install nano -y
