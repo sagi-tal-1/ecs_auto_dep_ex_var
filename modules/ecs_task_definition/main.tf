@@ -17,16 +17,16 @@ resource "aws_ecs_task_definition" "app" {
       portMappings = [
         {
           containerPort = var.nginx_port
-          hostPort      = 80
+          hostPort      = 0
           protocol      = "tcp"
         }
       ]
       logConfiguration = {
         logDriver = "awslogs"
         options = {
-          awslogs-group         = var.cloudwatch_log_group_name
+          awslogs-group         = var.log_group_name
           awslogs-region        = var.log_region
-          awslogs-stream-prefix = "nginx"
+          awslogs-stream-prefix = "ecs"
         }
       }
     }

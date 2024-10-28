@@ -18,6 +18,10 @@ output "nginx_port" {
   value = var.nginx_port
 }
 
+# output "node_port" {
+#   value = var.node_port
+# }
+
 output "node_port" {
-  value = var.node_port
-}
+     value = var.node_port != null ? var.node_port : null
+   }

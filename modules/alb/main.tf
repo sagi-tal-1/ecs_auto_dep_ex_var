@@ -19,10 +19,18 @@ resource "aws_security_group" "http" {
     to_port     = 0
     cidr_blocks = ["0.0.0.0/0"]
   }
+
+  lifecycle {
+    create_before_destroy = true
+  }
+
+  tags = {
+    Name = "http-sg-${var.name_prefix}"
+  }
 }
 
 resource "aws_lb" "main" {
-  name               = "demo-alb"
+  name               = var.alb_name
   load_balancer_type = "application"
   subnets            = var.subnet_ids
   security_groups    = [aws_security_group.http.id]
@@ -35,30 +43,47 @@ resource "aws_lb" "main" {
 }
 
 resource "random_id" "target_group_suffix" {
-  byte_length = 4
+  byte_length = 2
+  keepers = {
+    # This will force a new random_id when any of these values change
+    name_prefix = var.name_prefix
+    vpc_id      = var.vpc_id
+    port        = var.nginx_port
+  }
 }
 
 resource "aws_lb_target_group" "app" {
-  name        = substr("app-${var.name_prefix}-${random_id.target_group_suffix.hex}", 0, 32)
+  name        = substr("tg-${var.name_prefix}-${random_id.target_group_suffix.hex}", 0, 32)
   port        = var.nginx_port
   protocol    = "HTTP"
   vpc_id      = var.vpc_id
   target_type = "instance"
 
-   health_check {
-       path                = "/"
-       healthy_threshold   = 2
-       unhealthy_threshold = 10
-       timeout             = 30
-       interval            = 60
-       matcher             = "200,301,302"
-     }
+  lifecycle {
+    create_before_destroy = true
+    replace_triggered_by = [
+      random_id.target_group_suffix
+    ]
+  }
 
-  # Add this stickiness block for better session management with dynamic ports
+  health_check {
+    path                = "/"
+    healthy_threshold   = 2
+    unhealthy_threshold = 10
+    timeout             = 30
+    interval            = 60
+    matcher             = "200,301,302"
+  }
+
   stickiness {
     type            = "lb_cookie"
     cookie_duration = 86400
     enabled         = true
+  }
+
+  # Add a small delay to ensure unique names
+  provisioner "local-exec" {
+    command = "sleep 2"
   }
 }
 

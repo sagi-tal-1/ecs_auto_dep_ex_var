@@ -13,7 +13,7 @@ locals {
 }
 
 resource "aws_subnet" "public" {
-  count                   = length(var.availability_zones)
+  count                   = 2 # length(var.availability_zones)
   vpc_id                  = local.vpc_id
   availability_zone       = var.availability_zones[count.index]
   cidr_block              = cidrsubnet(var.cidr_block, 8, count.index)
@@ -22,7 +22,7 @@ resource "aws_subnet" "public" {
 }
 
 resource "aws_subnet" "private" {
-  count              = length(var.availability_zones)
+  count              = length(var.availability_zones) - 1   # length(var.availability_zones)
   vpc_id             = local.vpc_id
   cidr_block         = cidrsubnet(var.cidr_block, 8, count.index + length(var.availability_zones))
   availability_zone = var.availability_zones[count.index]

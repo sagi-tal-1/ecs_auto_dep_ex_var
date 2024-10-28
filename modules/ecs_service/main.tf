@@ -14,11 +14,21 @@ resource "aws_ecs_service" "app" {
     }
   }
 
+  # ordered_placement_strategy {
+  #   type  = "spread"
+  #   field = "attribute:ecs.availability-zone"
+  # }
+
+  # ordered_placement_strategy {
+  #   type  = "binpack"
+  #   field = "memory"
+  # }
+
   ordered_placement_strategy {
     type  = "spread"
     field = "instanceId"
   }
-  
+   
   load_balancer {
     target_group_arn = var.target_group_arn
     container_name   = "${var.container_name}-nginx"
@@ -34,16 +44,27 @@ resource "aws_ecs_service" "app" {
     type = "ECS"
   }
 
-  lifecycle {
-    create_before_destroy = true
-  }
-
-  placement_constraints {
+ placement_constraints {
     type = "distinctInstance"
   }
+  health_check_grace_period_seconds = 60
+  lifecycle {
+    create_before_destroy = true
+    
+    # Add this to prevent destroy if tasks are running
+    prevent_destroy = false
+  }
 
-  # Remove the network_configuration block if it exists
+  provisioner "local-exec" {
+    when    = destroy
+    command = "aws ecs update-service --cluster ${var.cluster_name} --service ${self.name} --desired-count 0 || true"
+  }
+ 
+ 
+  # no network conf as task defenition uses bridg network
 }
+
+
 
 
 

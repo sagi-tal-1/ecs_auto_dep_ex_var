@@ -1,0 +1,6 @@
+full_access_policy_arn = "arn:aws:iam::010575877879:policy/demo-ecs-node-role-3a1edbae-full-access"
+instance_ips = tolist([
+  "54.91.206.135",
+])
+key_name = "ecs-instance-key-3a1edbae"
+selected_ecs_optimized_ami_id = "ami-0405a351efe9c1ee0"

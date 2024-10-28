@@ -1,0 +1,20 @@
+[ec2-user@ip-172-31-29-144 ~]$ sudo yum remove docker \
+             docker-client \
+             docker-client-latest \
+             docker-common \
+             docker-latest \
+             docker-latest-logrotate \
+             docker-logrotate \
+             docker-engine
+
+sudo dnf update -y
+
+sudo dnf install docker -y
+
+sudo systemctl start docker
+
+sudo usermod -aG docker ec2-user
+
+newgrp docker
+
+sudo dnf install amazon-cloudwatch-agent -y

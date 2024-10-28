@@ -4,7 +4,19 @@ data "aws_iam_policy_document" "full_access" {
     actions = [
       "ec2:*",
       "ecs:*",
-      "logs:*"
+      "logs:*",
+      "iam:PassRole",
+      "iam:GetRole",
+      "iam:ListRolePolicies",
+      "iam:ListAttachedRolePolicies"
+    ]
+    resources = ["*"]
+  }
+    statement {
+    effect = "Allow"
+    actions = [
+      "ec2:DescribeAddresses",
+      "ec2:ReleaseAddress"
     ]
     resources = ["*"]
   }

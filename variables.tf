@@ -95,3 +95,9 @@ variable "name_prefix" {
   default     = "demo" # You can change this default value
 }
 
+variable "log_file" {
+  description = "Path to the log file for ECS user data script."
+  type        = string
+  default     = "/var/log/ecs/user_data.log"
+}
+

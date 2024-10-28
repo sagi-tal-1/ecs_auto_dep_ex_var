@@ -1,3 +1,5 @@
+
+#moduls/ecs_launch_template/virabels.tf
 variable "name_prefix" {
   description = "Prefix for the launch template name."
   type        = string
@@ -77,4 +79,19 @@ variable "dockerhub_password" {
   description = "Docker Hub password"
   type        = string
   sensitive   = true
+}
+
+variable "log_file" {
+  description = "Path to the log file for ECS user data script."
+  type        = string
+  default     = "/var/log/ecs/user_data.log"
+}
+variable "error_log" {
+  description = "Path to the error log file for ECS user data script."
+  type        = string
+}
+
+variable "public_subnet_ids" {
+  description = "List of public subnet IDs for the ECS service"
+  type        = list(string)
 }

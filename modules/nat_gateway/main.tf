@@ -3,6 +3,16 @@ resource "aws_eip" "nat" {
   tags = {
     Name = "${var.name_prefix}-eip-nat"
   }
+
+  lifecycle {
+    create_before_destroy = true
+  }
+
+  provisioner "local-exec" {
+    when    = destroy
+    command = "aws ec2 release-address --allocation-id ${self.id} || true"
+  }
+
 }
 
 resource "aws_nat_gateway" "main" {
@@ -12,6 +22,7 @@ resource "aws_nat_gateway" "main" {
   tags = {
     Name = "${var.name_prefix}-nat-gw"
   }
+depends_on = [aws_eip.nat]
 
   lifecycle {
     create_before_destroy = true

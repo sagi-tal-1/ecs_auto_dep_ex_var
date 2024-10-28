@@ -30,10 +30,10 @@ variable "memory" {
 
 
 
-variable "example_env_value" {
-  description = "Example environment variable value"
-  type        = string
-}
+# variable "example_env_value" {
+#   description = "Example environment variable value"
+#   type        = string
+# }
 
 variable "log_region" {
   description = "AWS region for CloudWatch logs"
@@ -62,15 +62,15 @@ variable "nginx_port" {
   type        = number
 }
 
-variable "node_port" {
-  description = "Port number for Node.js container"
-  type        = number
-}
+# variable "node_port" {
+#   description = "Port number for Node.js container"
+#   type        = number
+# }
 
-variable "availability_zones" {
-  description = "List of availability zones"
-  type        = list(string)
-}
+# variable "availability_zones" {
+#   description = "List of availability zones"
+#   type        = list(string)
+# }
 
 variable "cloudwatch_log_group_arn" {
   description = "ARN of the CloudWatch Log Group"
@@ -87,3 +87,8 @@ variable "docker_image" {
    }
 
 
+  variable "node_port" {
+     description = "Port number for Node.js container"
+     type        = number
+     default     = null
+   }

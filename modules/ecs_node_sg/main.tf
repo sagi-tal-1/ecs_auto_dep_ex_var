@@ -2,7 +2,9 @@ resource "aws_security_group" "ecs_node_sg" {
   name_prefix = var.name_prefix
   description = "Security group for ECS nodes"
   vpc_id      = var.vpc_id
+  revoke_rules_on_delete = false
 
+  
   # Allow all inbound traffic from ALB
   ingress {
     from_port       = 0
@@ -76,3 +78,4 @@ resource "aws_security_group_rule" "allow_container_ports" {
      security_group_id = aws_security_group.ecs_node_sg.id
      description       = "Allow inbound traffic on container ports"
    }
+

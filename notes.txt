@@ -545,3 +545,846 @@ checking usege
  ____|\___|____/
 
 For documentation, visit http://aws.amazon.com/documentation/ecs
+
+
+
+
+
+ docker inspect e61ac1046640 | grep -i oom
+
+checking cluster name passed:
+cat /etc/ecs/ecs.config | grep ECS_CLUSTER
+
+ to fix:
+ http.response.body=
+  | <?xml version="1.0" encoding="UTF-8"?>
+  | <Response><Errors><Error><Code>DependencyViolation</Code><Message>Network vpc-0d4526c92c584d2fd has some mapped public address(es). Please unmap those public address(es) before detaching the gateway.</Message></Error></Errors><RequestID>1afd93a6-c7be-4ee9-97ec-ee963b5f6c25</RequestID></Response>
+
+
+
+           
+
+#sudo reboot
+
+# ECS_ENABLE_SPOT_INSTANCE_DRAINING=true
+# ECS_CONTAINER_STOP_TIMEOUT=120s
+# ECS_ENGINE_TASK_CLEANUP_WAIT_DURATION=1h
+# ECS_IMAGE_CLEANUP_INTERVAL=10m
+# ECS_RESERVED_MEMORY=32 # need to ckeck-----------------------------------
+# ECS_DISABLE_IMAGE_CLEANUP=false
+# ECS_ENABLE_UNTRACKED_IMAGE_CLEANUP=true
+# ECS_ENABLE_MEMORY_UNBOUNDED_WINDOWS_WORKAROUND=true
+# ECS_DATADIR=/data
+# ECS_ENABLE_GPU_SUPPORT=false
+# ECS_POLL_METRICS=true
+# ECS_UPDATE_DOWNLOAD_MAX_RETRIES=5
+# ECS_ENABLE_AWSLOGS_EXECUTIONROLE_OVERRIDE=true
+
+# #!/bin/bash
+# dnf install nano -y
+# # Redirect all output to a log file and console
+# exec > >(tee /var/log/user-data.log | logger -t user-data -s 2>/dev/console) 2>&1
+
+# echo "Starting enhanced user-data script at $(date)"
+
+# # Function to check last command status and log
+# check_status() {
+#     local status=$?
+#     if [ $status -ne 0 ]; then
+#         echo "ERROR: $1 failed"
+#         return 1
+#     else
+#         echo "SUCCESS: $1 completed successfully"
+#         return 0
+#     fi
+# }
+
+# # Function to check if a service is running
+# check_service() {
+#     if systemctl is-active --quiet "$1"; then
+#         echo "SUCCESS: $1 is running"
+#         return 0
+#     else
+#         echo "ERROR: $1 is not running"
+#         systemctl status "$1"
+#         return 1
+#     fi
+# }
+
+# # Function to check if a file exists
+# check_file() {
+#     if [ -f "$1" ]; then
+#         echo "SUCCESS: File $1 exists"
+#         return 0
+#     else
+#         echo "ERROR: File $1 does not exist"
+#         return 1
+#     fi
+# }
+
+# # Function to check if a string is in a file
+# check_string_in_file() {
+#     if grep -q "$1" "$2"; then
+#         echo "SUCCESS: String '$1' found in $2"
+#         return 0
+#     else
+#         echo "ERROR: String '$1' not found in $2"
+#         return 1
+#     fi
+# }
+
+# # Function to check IAM role permissions
+# check_iam_permission() {
+#     if aws "$1" "$2" "$3" "$4" 2>&1 | grep -q "An error occurred"; then
+#         echo "ERROR: IAM role does not have permission to perform $1 $2"
+#         return 1
+#     else
+#         echo "SUCCESS: IAM role has permission to perform $1 $2"
+#         return 0
+#     fi
+# }
+
+# # Ensure the script is running on an ECS-optimized AMI
+# if ! grep -q "Amazon Linux 2" /etc/os-release; then
+#     echo "ERROR: This script is intended to run on an ECS-optimized Amazon Linux 2 AMI"
+#     exit 1
+# fi
+
+# # Install necessary tools (if not already present)
+# echo "Ensuring necessary tools are installed..."
+# yum install -y jq aws-cli
+# check_status "Tool installation"
+
+# # Check IAM role permissions
+# echo "Checking IAM role permissions..."
+# region=$(curl -s http://169.254.169.254/latest/meta-data/placement/region)
+# check_iam_permission "ecs" "list-clusters" "--region" "$region"
+# check_iam_permission "logs" "describe-log-groups" "--region" "$region"
+# check_iam_permission "ec2" "describe-instances" "--region" "$region"
+
+# # Set up ECS config
+# echo "Configuring ECS..."
+# mkdir -p /etc/ecs
+# cat << EOF > /etc/ecs/ecs.config
+# ECS_CLUSTER=${cluster_name}
+# ECS_AVAILABLE_LOGGING_DRIVERS=["awslogs", "json-file"]
+# ECS_ENABLE_CONTAINER_METADATA=true
+# ECS_ENGINE_TASK_CLEANUP_WAIT_DURATION=1h
+# ECS_IMAGE_PULL_BEHAVIOR=once
+# ECS_ENABLE_SPOT_INSTANCE_DRAINING=true
+# EOF
+# check_status "ECS configuration"
+# check_file "/etc/ecs/ecs.config"
+# check_string_in_file "ECS_CLUSTER=${cluster_name}" "/etc/ecs/ecs.config"
+
+# # Configure and start ECS agent
+# echo "Ensuring ECS agent is configured and running..."
+# systemctl enable --now ecs
+# systemctl restart ecs
+# check_service "ecs"
+
+# # Wait for ECS agent to fully start
+# sleep 30
+
+# # Configure and start Docker (if not already running)
+# echo "Ensuring Docker is configured and running..."
+# if ! systemctl is-active --quiet docker; then
+#     systemctl enable docker
+#     systemctl start docker
+# fi
+# check_service "docker"
+
+# # Set up Docker log rotation
+# echo "Configuring Docker log rotation..."
+# cat > /etc/docker/daemon.json <<EOF
+# {
+#   "log-driver": "json-file",
+#   "log-opts": {
+#     "max-size": "10m",
+#     "max-file": "5"
+#   }
+# }
+# EOF
+# systemctl restart docker
+# check_status "Docker log rotation configuration"
+# check_file "/etc/docker/daemon.json"
+
+# # Configure CloudWatch agent
+# echo "Configuring CloudWatch agent..."
+# cat > /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json << EOF
+# {
+#   "agent": {
+#     "run_as_user": "root"
+#   },
+#   "logs": {
+#     "logs_collected": {
+#       "files": {
+#         "collect_list": [
+#           {
+#             "file_path": "/var/log/messages",
+#             "log_group_name": "${log_group_name}",
+#             "log_stream_name": "{instance_id}/system-logs"
+#           },
+#           {
+#             "file_path": "/var/log/ecs/ecs-init.log",
+#             "log_group_name": "${log_group_name}",
+#             "log_stream_name": "{instance_id}/ecs-init"
+#           },
+#           {
+#             "file_path": "/var/log/ecs/ecs-agent.log",
+#             "log_group_name": "${log_group_name}",
+#             "log_stream_name": "{instance_id}/ecs-agent"
+#           },
+#           {
+#             "file_path": "/var/log/user-data.log",
+#             "log_group_name": "${log_group_name}",
+#             "log_stream_name": "{instance_id}/user-data"
+#           }
+#         ]
+#       }
+#     }
+#   },
+#   "metrics": {
+#     "metrics_collected": {
+#       "cpu": {
+#         "measurement": [
+#           "usage_active",
+#           "usage_system",
+#           "usage_user"
+#         ],
+#         "metrics_collection_interval": 60
+#       },
+#       "memory": {
+#         "measurement": [
+#           "used_percent",
+#           "used",
+#           "total"
+#         ],
+#         "metrics_collection_interval": 60
+#       },
+#       "swap": {
+#         "measurement": [
+#           "used_percent",
+#           "used",
+#           "free"
+#         ],
+#         "metrics_collection_interval": 60
+#       },
+#       "disk": {
+#         "measurement": [
+#           "used_percent",
+#           "used",
+#           "total"
+#         ],
+#         "metrics_collection_interval": 60,
+#         "resources": [
+#           "/"
+#         ]
+#       }
+#     }
+#   }
+# }
+# EOF
+# check_status "CloudWatch agent configuration"
+# check_file "/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json"
+
+# # Start CloudWatch agent
+# echo "Starting CloudWatch agent..."
+# /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -s -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
+# systemctl enable amazon-cloudwatch-agent
+# systemctl start amazon-cloudwatch-agent
+# check_service "amazon-cloudwatch-agent"
+
+# # Verify network connectivity
+# echo "Verifying network connectivity..."
+# if ping -c 3 amazon.com &> /dev/null; then
+#     echo "SUCCESS: Network is reachable"
+# else
+#     echo "ERROR: Network is not reachable"
+#     exit 1
+# fi
+
+# # Check ECS agent connectivity
+# echo "Checking ECS agent connectivity..."
+# if timeout 120s bash -c 'until curl -s http://localhost:51678/v1/metadata; do sleep 5; done' &> /dev/null; then
+#     echo "SUCCESS: ECS agent is responsive"
+# else
+#     echo "ERROR: ECS agent is not responsive"
+#     systemctl status ecs
+#     journalctl -u ecs
+#     exit 1
+# fi
+
+# # Verify Docker is operational
+# echo "Verifying Docker functionality..."
+# if docker run --rm hello-world &> /dev/null; then
+#     echo "SUCCESS: Docker is operational"
+# else
+#     echo "ERROR: Docker is not functioning properly"
+#     exit 1
+# fi
+
+# # Check if instance is registered with ECS cluster
+# echo "Checking ECS cluster registration..."
+# instance_id=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)
+# cluster_check=$(aws ecs list-container-instances --cluster "${cluster_name}" --filter "ec2InstanceId==$instance_id" --region "$region")
+# if [[ $(echo "$cluster_check" | jq '.containerInstanceArns | length') -gt 0 ]]; then
+#     echo "SUCCESS: Instance is registered with ECS cluster ${cluster_name}"
+# else
+#     echo "ERROR: Instance is not registered with ECS cluster ${cluster_name}"
+#     exit 1
+# fi
+
+# # Final check for ECS agent
+# if ! systemctl is-active --quiet ecs; then
+#     echo "ERROR: ECS agent is not running at the end of the script"
+#     systemctl status ecs
+#     journalctl -u ecs
+#     exit 1
+# fi
+
+# echo "All checks completed. User-data script finished at $(date)"
+
+# # Final status check
+# final_status=0
+# for service in ecs docker amazon-cloudwatch-agent; do
+#     if ! systemctl is-active --quiet "$service"; then
+#         echo "ERROR: $service is not running"
+#         final_status=1
+#     fi
+# done
+
+# if [ $final_status -eq 0 ]; then
+#     echo "SUCCESS: User-data script executed successfully"
+# else
+#     echo "ERROR: User-data script encountered issues"
+#     exit 1
+# fi
+
+
+
+
+
+
+
+
+
+# # Configure ECS
+# log "Configuring ECS agent"
+# sudo mkdir -p /etc/ecs
+# sudo tee /etc/ecs/ecs.config > /dev/null << EOF
+# ECS_CLUSTER=${cluster_name}
+# ECS_LOGLEVEL=info
+# ECS_AVAILABLE_LOGGING_DRIVERS=["awslogs","json-file"]
+# ECS_ENABLE_TASK_IAM_ROLE=true
+# ECS_ENABLE_TASK_IAM_ROLE_NETWORK_HOST=true
+# ECS_ENABLE_CONTAINER_METADATA=true
+# ECS_ENABLE_EXECUTE_COMMAND=true
+# EOF
+# check_status "ECS agent configuration"
+
+# #configure and start CloudWatch agent
+# sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-config-wizard
+# sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -s -c file:/opt/aws/amazon-cloudwatch-agent/bin/config.json
+
+# # # Configure awslogs
+# # log "Configuring awslogs"
+# # sudo sed -i "s/region = us-east-1/region = ${region}/" /etc/awslogs/awscli.conf
+# # sudo sed -i "s/log_group_name = /log_group_name = ${log_group_name}/" /etc/awslogs/awslogs.conf
+# # sudo sed -i "s/log_stream_name = /log_stream_name = ${log_stream_name}/" /etc/awslogs/awslogs.conf
+# # check_status "awslogs configuration"
+
+# # # Start services
+# # log "Starting awslogs and ECS services"
+# # sudo systemctl enable awslogsd.service ecs
+# # sudo systemctl start amazon-cloudwatch-agent
+# # sudo systemctl enable amazon-cloudwatch-agent # start on boot time
+# # check_status "awslogs and ECS services start"
+
+# # # Pull latest ECS agent image
+# # log "Pulling latest ECS agent image"
+# # docker pull amazon/amazon-ecs-agent:latest
+# # check_status "ECS agent image pull"
+
+# # Make environment variables persistent
+# sudo tee /etc/profile.d/ecs_environment.sh > /dev/null << EOF
+# export cluster_name="${cluster_name}"
+# export log_group_name="${log_group_name}"
+# export log_stream_name="${log_stream_name}"
+# export region="${region}"
+# EOF
+
+# log "ECS instance configuration completed"
+
+#  # Verify network connectivity
+# echo "Verifying network connectivity..."
+# if ping -c 3 amazon.com &> /dev/null; then
+#     echo "SUCCESS: Network is reachable"
+# else
+#     echo "ERROR: Network is not reachable"
+#     exit 1
+# fi
+# # Docker Hub login
+# if [ -z "${dockerhub_username}" ] || [ -z "${dockerhub_password}" ]; then
+#     log "Warning: Docker Hub credentials not provided. Skipping Docker login."
+# else
+#     log "Logging into Docker Hub"
+#     echo "${dockerhub_password}" | docker login --username "$dockerhub_username" --password "$dockerhub_password"
+#     check_status "Docker Hub login"
+# fi
+
+# # Check ECS agent connectivity
+# echo "Checking ECS agent connectivity..."
+# if timeout 120s bash -c 'until curl -s http://localhost:51678/v1/metadata; do sleep 5; done' &> /dev/null; then
+#     echo "SUCCESS: ECS agent is responsive"
+# else
+#     echo "ERROR: ECS agent is not responsive"
+#     systemctl status ecs
+#     journalctl -u ecs
+#     exit 1
+# fi
+
+# # Verify Docker is operational
+# echo "Verifying Docker functionality..."
+# if docker run --rm hello-world &> /dev/null; then
+#     echo "SUCCESS: Docker is operational"
+# else
+#     echo "ERROR: Docker is not functioning properly"
+#     exit 1
+# fi
+
+# # Check if instance is registered with ECS cluster
+# echo "Checking ECS cluster registration..."
+# instance_id=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)
+# cluster_check=$(aws ecs list-container-instances --cluster "${cluster_name}" --filter "ec2InstanceId==$instance_id" --region "$region")
+# if [[ $(echo "$cluster_check" | jq '.containerInstanceArns | length') -gt 0 ]]; then
+#     echo "SUCCESS: Instance is registered with ECS cluster ${cluster_name}"
+# else
+#     echo "ERROR: Instance is not registered with ECS cluster ${cluster_name}"
+#     exit 1
+# fi
+
+# # Final check for ECS agent
+# if ! systemctl is-active --quiet ecs; then
+#     echo "ERROR: ECS agent is not running at the end of the script"
+#     systemctl status ecs
+#     journalctl -u ecs
+#     exit 1
+# fi
+
+# echo "All checks completed. User-data script finished at $(date)"
+
+# # Final status check
+# final_status=0
+# for service in ecs docker amazon-cloudwatch-agent; do
+#     if ! systemctl is-active --quiet "$service"; then
+#         echo "ERROR: $service is not running"
+#         final_status=1
+#     fi
+# done
+
+# if [ $final_status -eq 0 ]; then
+#     echo "SUCCESS: User-data script executed successfully"
+# else
+#     echo "ERROR: User-data script encountered issues"
+#     exit 1
+# fi
+
+# # Set up EC2 terminate handler
+# log "Setting up EC2 terminate handler"
+# cat << EOF > /etc/ec2-terminate-handler
+# #!/bin/bash
+# # Notify ECS that the instance is terminating
+# ecs-init stop
+# sleep 30
+# EOF
+
+# chmod +x /etc/ec2-terminate-handler
+
+# # Register the terminate handler
+# echo '/etc/ec2-terminate-handler' | sudo tee -a /etc/rc.d/rc.local
+# sudo chmod +x /etc/rc.d/rc.local
+# check_status "EC2 terminate handler setup"
+
+# log "ECS instance configuration completed successfully"
+# log "Rebooting instance in 10 seconds to apply all changes"
+# sleep 10
+
+# {
+#   echo "ECS agent status:"
+#   sudo docker ps | grep ecs-agent
+#   sudo systemctl status ecs
+# } >> /var/log/user-data.log
+
+# # ecs checks!
+# # Create a directory for the output
+# mkdir -p /var/log/ecs_debug_output
+# cd /var/log/ecs_debug_output || exit 1
+
+# # Function to run command and save output
+# run_command() {
+#     echo "Running: $1"
+#     eval "$1" > "$2" 2>&1
+#     echo "Output saved to: $2"
+#     echo
+# }
+
+# # Display current environment variables
+# {
+#     echo "Current environment variables:"
+#     echo "cluster_name: $cluster_name"
+#     echo "log_group_name: $log_group_name"
+#     echo "log_stream_name: $log_stream_name"
+#     echo "region: $region"
+#     echo "dockerhub_username: $dockerhub_username"
+#     echo "dockerhub_password: [REDACTED]"
+# } >> 00_environment_vars.txt
+
+# # Run checks and save outputs
+# run_command "systemctl status ecs" "01_ecs_status.txt"
+# run_command "tail -n 100 /var/log/ecs/ecs-agent.log" "02_ecs_agent_log.txt"
+# run_command "curl -s http://localhost:51678/v1/metadata | python -mjson.tool" "03_instance_metadata.json"
+# run_command "cat /var/lib/ecs/data/instance-attributes.json" "04_instance_attributes.json"
+# run_command "cat /etc/ecs/ecs.config" "05_ecs_config.txt"
+# run_command "docker info" "06_docker_info.txt"
+# run_command "free -m" "07_memory_info.txt"
+# run_command "df -h" "08_disk_info.txt"
+# run_command "curl -s http://169.254.169.254/latest/meta-data/iam/security-credentials/" "09_iam_role.txt"
+# run_command "aws ecs list-clusters --region $region" "10_ecs_clusters.json"
+# run_command "aws ecs describe-task-definition --task-definition $cluster_name --region $region" "11_task_definition.json"
+# run_command "aws ec2 describe-instance-attribute --instance-id $(curl -s http://169.254.169.254/latest/meta-data/instance-id) --attribute groupSet --region $region" "12_security_groups.json"
+# run_command "aws ecs list-tasks --cluster $cluster_name --region $region" "13_ecs_tasks.json"
+# run_command "systemctl status docker" "14_docker_status.txt"
+# run_command "docker ps | grep ecs-agent" "15_ecs_agent_version.txt"
+# run_command "ping -c 4 ecs.$region.amazonaws.com" "16_ecs_connectivity.txt"
+# run_command "curl -v https://ecs.$region.amazonaws.com" "17_ecs_api_connectivity.txt"
+# run_command "tail -n 100 /var/log/amazon/ecs/ecs-init.log" "18_ecs_init_log.txt"
+# run_command "aws cloudwatch get-metric-statistics --metric-name CPUCreditBalance --namespace AWS/EC2 --period 300 --statistics Average --dimensions Name=InstanceId,Value=$(curl -s http://169.254.169.254/latest/meta-data/instance-id) --start-time $(date -u +"%Y-%m-%dT%H:%M:%SZ" --date "-1 hour") --end-time $(date -u +"%Y-%m-%dT%H:%M:%SZ") --region $region" "19_cpu_credits.json"
+# run_command "journalctl -xe" "20_system_events.txt"
+# run_command "aws ecs describe-container-instances --cluster $cluster_name --container-instances $(curl -s http://localhost:51678/v1/metadata | jq -r .ContainerInstanceArn) --region $region" "21_container_instance_state.json"
+# run_command "aws ecs describe-services --services $cluster_name --cluster $cluster_name --region $region" "22_ecs_service_description.json"
+# run_command "aws logs get-log-events --log-group-name $log_group_name --log-stream-name $log_stream_name --region $region" "23_cloudwatch_logs.json"
+# run_command "docker login --username $dockerhub_username --password $dockerhub_password" "24_docker_login_test.txt"
+
+# echo "All checks completed. Please review the output files in the '/var/log/ecs_debug_output' directory."
+
+# # q
+# # Docker Hub login
+# if [ -z "${dockerhub_username}" ] || [ -z "${dockerhub_password}" ]; then
+#     log "Warning: Docker Hub credentials not provided. Skipping Docker login."
+# else
+#     log "Logging into Docker Hub"
+#     echo "${dockerhub_password}" |docker login --username "$dockerhub_username" --password "$dockerhub_password"
+#     check_status "Docker Hub login"
+# fi
+
+# # Additional diagnostic checks
+# log "Running diagnostic checks"
+
+# # Check Docker status
+# log "Checking Docker status"
+# sudo systemctl status docker
+# check_status "Docker status check"
+
+# # Check ECS service status
+# log "Checking ECS service status"
+# sudo systemctl status ecs
+# check_status "ECS service status check"
+
+# # Check ECS agent logs
+# log "Checking ECS agent logs"
+# sudo tail -n 50 /var/log/ecs/ecs-agent.log
+# check_status "ECS agent log check"
+
+# # Verify ECS agent is running
+# log "Verifying ECS agent is running"
+# docker ps | grep ecs-agent
+# check_status "ECS agent running check"
+
+# # Check ECS agent metadata
+# log "Checking ECS agent metadata"
+# curl -s http://localhost:51678/v1/metadata
+# check_status "ECS agent metadata check"
+
+# # Check system resources
+# log "Checking system resources"
+# free -m
+# df -h
+# check_status "System resources check"
+
+# # Check ECS cluster status
+# log "Checking ECS cluster status"
+# aws ecs describe-clusters --clusters "${cluster_name}" --region "${region}"
+# check_status "ECS cluster status check"
+
+# # List container instances
+# log "Listing container instances"
+# aws ecs list-container-instances --cluster "${cluster_name}" --region "${region}"
+# check_status "Container instances list"
+
+# # List tasks
+# log "Listing tasks"
+# aws ecs list-tasks --cluster "${cluster_name}" --region "${region}"
+# check_status "Tasks list"
+
+# # Check network connectivity
+# log "Checking network connectivity"
+# ping -c 4 "ecs.${region}.amazonaws.com"
+# check_status "Network connectivity check"
+
+# # View ECS config file
+# log "Viewing ECS config file"
+# cat /etc/ecs/ecs.config
+# check_status "ECS config file check"
+
+# log "Diagnostic checks completed"
+
+# # Final status check
+# final_status=0
+# for service in ecs docker awslogsd; do
+#     if ! systemctl is-active --quiet "$service"; then
+#         log "ERROR: $service is not running"
+#         final_status=1
+#     fi
+# done
+
+# if [ $final_status -eq 0 ]; then
+#     log "SUCCESS: User-data script executed successfully"
+# else
+#     log "ERROR: User-data script encountered issues"
+#     exit 1
+# fi
+
+
+# # Debug output
+# {
+#     echo "Current environment variables:"
+#     echo "cluster_name: $cluster_name"
+#     echo "log_group_name: $log_group_name"
+#     echo "log_stream_name: $log_stream_name"
+#     echo "region: $region"
+#     echo "dockerhub_username: $dockerhub_username"
+#     echo "dockerhub_password: [REDACTED]"
+# } >> /var/log/ecs_debug_output.txt
+
+
+# log "ECS instance configuration and diagnostics completed"
+
+# # Make environment variables persistent
+# {
+#     echo "export cluster_name=\"${cluster_name}\""
+#     echo "export log_group_name=\"${log_group_name}\""
+#     echo "export log_stream_name=\"${log_stream_name}\""
+#     echo "export region=\"${region}\""
+#     echo "export dockerhub_username=\"${dockerhub_username}\""
+#     echo "export dockerhub_password=\"${dockerhub_password}\""
+# } >> /etc/profile.d/ecs_environment.sh
+
+
+
+
+
+
+
+
+
+
+
+#!/bin/bash 
+
+# Set and export variables
+export cluster_name="${cluster_name}"
+export log_group_name="${log_group_name}"
+export log_stream_name="${log_stream_name}"
+export region="${region}"
+
+
+# Write environment variables to /etc/environment
+echo "cluster_name=${cluster_name}" | sudo tee -a /etc/environment
+echo "log_group_name=${log_group_name}" | sudo tee -a /etc/environment
+echo "log_stream_name=${log_stream_name}" | sudo tee -a /etc/environment
+echo "region=${region}" | sudo tee -a /etc/environment
+
+
+
+# Function to log messages
+log() {
+    echo "[$(date +'%Y-%m-%d %H:%M:%S')] $1" | tee -a /var/log/user-data.log
+}
+
+# Function to check status and log
+check_status() {
+    if [ $? -eq 0 ]; then
+        log "Success: $1"
+    else
+        log "Error: $1 failed"
+        exit 1
+    fi
+}
+
+# Start configuration
+log "Starting ECS instance configuration"
+log "ECS Cluster Name: $cluster_name"
+log "Log Group Name: $log_group_name"
+log "Region: $region"
+
+# Update system packages
+log "Updating system packages"
+sudo yum update -y
+check_status "System update"
+
+
+
+# Create CloudWatch agent configuration file
+log "Creating CloudWatch agent configuration"
+cat <<EOF > /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
+{
+    "agent": {
+        "metrics_collection_interval": 60,
+        "run_as_user": "root"
+    },
+    "logs": {
+        "logs_collected": {
+            "files": {
+                "collect_list": [
+                    {
+                        "file_path": "/var/log/messages",
+                        "log_group_name": "your-log-group-name",
+                        "log_stream_name": "{instance_id}-messages"
+                    },
+                    {
+                        "file_path": "/var/log/ecs/ecs-agent.log",
+                        "log_group_name": "your-log-group-name",
+                        "log_stream_name": "{instance_id}-ecs-agent"
+                    },
+                    {
+                        "file_path": "/var/log/ecs/ecs-init.log",
+                        "log_group_name": "your-log-group-name",
+                        "log_stream_name": "{instance_id}-ecs-init"
+                    }
+                ]
+            }
+        }
+    },
+    "metrics": {
+        "metrics_collected": {
+            "cpu": {
+                "measurement": [
+                    "usage_active",
+                    "usage_system",
+                    "usage_user"
+                ],
+                "metrics_collection_interval": 60
+            },
+            "disk": {
+                "measurement": [
+                    "used_percent"
+                ],
+                "metrics_collection_interval": 60,
+                "resources": [
+                    "*"
+                ]
+            },
+            "mem": {
+                "measurement": [
+                    "used_percent"
+                ],
+                "metrics_collection_interval": 60
+            }
+        }
+    }
+}
+EOF
+check_status "CloudWatch agent configuration creation"
+
+# Start CloudWatch agent
+log "Starting CloudWatch agent"
+sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -s -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
+check_status "CloudWatch agent start"
+
+#restart
+sudo systemctl restart amazon-cloudwatch-agent
+
+# Enable CloudWatch agent to start on boot
+log "Enabling CloudWatch agent to start on boot"
+sudo systemctl enable amazon-cloudwatch-agent
+check_status "CloudWatch agent enable on boot"
+
+# Configure ECS agent
+log "Configuring ECS agent"
+echo "ECS_CLUSTER=${cluster_name}" | sudo tee -a /etc/ecs/ecs.config
+echo "ECS_AVAILABLE_LOGGING_DRIVERS=[\"awslogs\",\"json-file\"]" | sudo tee -a /etc/ecs/ecs.config
+check_status "ECS agent configuration"
+
+# Restart ECS agent to apply changes
+log "Restarting ECS agent"
+sudo systemctl restart ecs
+check_status "ECS agent restart"
+
+log "ECS instance configuration completed"
+
+
+
+ami-06813d3793d203a47
+
+
+
+# # Function to check service status with timeout
+# check_service_status() {
+#     local service_name="$1"
+#     local max_attempts="$2"
+#     local attempt=1
+
+#     while [ "${attempt}" -le "${max_attempts}" ]; do
+#         log "Checking ${service_name} status (attempt ${attempt}/${max_attempts})"
+#         if systemctl is-active "${service_name}" >/dev/null 2>&1; then
+#             log "${service_name} is running"
+#             return 0
+#         fi
+#         attempt=$((attempt + 1))
+#         sleep 5
+#     done
+    
+#     error_log "${service_name} failed to start after ${max_attempts} attempts"
+#     systemctl status "${service_name}" | tee -a "${ERROR_LOG}"
+#     return 1
+# }
+
+# export cluster_name=cluster_name
+# export log_group_name=log_group_name
+# export log_stream_name=log_stream_name
+# export region=us-east-1
+
+
+# # Function to verify ECS agent connection
+# verify_ecs_agent() {
+#     log "Verifying ECS agent connection..."
+    
+#     local max_attempts=12
+#     local attempt=1
+#     local cluster_info
+#     local detected_cluster
+    
+#     while [ "${attempt}" -le "${max_attempts}" ]; do
+#         if curl -s localhost:51678/v1/metadata > /dev/null; then
+#             cluster_info=$(curl -s localhost:51678/v1/metadata)
+#             detected_cluster=$(echo "${cluster_info}" | jq -r '.Cluster' 2>/dev/null)
+            
+#             if [ "${detected_cluster}" = "${cluster_name}" ]; then
+#                 log "ECS agent successfully connected to cluster ${cluster_name}"
+#                 return 0
+#             else
+#                 error_log "Cluster name mismatch. Expected: ${cluster_name}, Got: ${detected_cluster}"
+#             fi
+#         fi
+        
+#         if [ "${attempt}" -eq "${max_attempts}" ]; then
+#             error_log "Failed to verify ECS agent connection after ${max_attempts} attempts"
+#             return 1
+#         fi
+        
+#         log "Waiting for ECS agent connection (attempt ${attempt}/${max_attempts})..."
+#         attempt=$((attempt + 1))
+#         sleep 10
+#     done
+# }
