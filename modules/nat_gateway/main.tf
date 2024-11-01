@@ -19,12 +19,21 @@ resource "aws_nat_gateway" "main" {
   allocation_id = aws_eip.nat.id
   subnet_id     = var.public_subnet_ids[0]
 
+
+  timeouts {
+    create = "30m"
+    delete = "30m"
+  }
+
   tags = {
     Name = "${var.name_prefix}-nat-gw"
   }
-depends_on = [aws_eip.nat]
 
   lifecycle {
     create_before_destroy = true
   }
+
+  depends_on = [aws_eip.nat]
+
 }
+

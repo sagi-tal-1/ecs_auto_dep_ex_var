@@ -1,3 +1,5 @@
+#modules/ecs_node_role/main.tf
+
 data "aws_iam_policy_document" "ecs_node_doc" {
   statement {
     actions = ["sts:AssumeRole"]
@@ -10,9 +12,9 @@ data "aws_iam_policy_document" "ecs_node_doc" {
 }
 
 resource "aws_iam_role" "ecs_node_role" {
-  name_prefix        = var.role_name_prefix
+  name_prefix        = substr(var.role_name_prefix, 0, 32)
   assume_role_policy = data.aws_iam_policy_document.ecs_node_doc.json
-  
+
   lifecycle {
     create_before_destroy = true
   }
@@ -38,6 +40,8 @@ resource "aws_iam_role" "ecs_exec_role" {
       }
     ]
   })
+
+  force_detach_policies = true
 }
 
 resource "aws_iam_role_policy_attachment" "ecs_node_role_policy" {
@@ -70,17 +74,17 @@ data "aws_iam_policy_document" "ecs_node_additional_permissions" {
       "iam:ListAttachedRolePolicies",
       "ec2:DescribeAddresses",
       "ec2:ReleaseAddress",
-      "ec2:DisassociateAddress"
+      "ec2:DisassociateAddress",
+      "ssm:UpdateInstanceInformation"
     ]
     resources = ["*"]
   }
-
 }
 
 resource "aws_iam_policy" "ecs_node_additional_permissions" {
-  name        = "${var.role_name_prefix}-additional-permissions"
+  name_prefix  = substr("${var.role_name_prefix}-add", 0, 32)
   path        = "/"
-  description = "Additional permissions for ECS node role including EIP management"
+  description = "Additional permissions for ECS node role"
   policy      = data.aws_iam_policy_document.ecs_node_additional_permissions.json
 }
 

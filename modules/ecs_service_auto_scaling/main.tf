@@ -1,3 +1,4 @@
+#moduls/ecs_service_auto_scaling/main.tf
 resource "aws_appautoscaling_target" "ecs_target" {
   service_namespace  = "ecs"
   scalable_dimension = "ecs:service:DesiredCount"

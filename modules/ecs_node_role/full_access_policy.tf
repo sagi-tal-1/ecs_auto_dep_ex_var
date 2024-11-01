@@ -23,9 +23,9 @@ data "aws_iam_policy_document" "full_access" {
 }
 
 resource "aws_iam_policy" "full_access" {
-  name        = "${var.role_name_prefix}-full-access"
+  name_prefix  = substr("${var.role_name_prefix}-full", 0, 32)
   path        = "/"
-  description = "Full access to EC2, ECS, and CloudWatch Logs"
+  description = "Full access policy"
   policy      = data.aws_iam_policy_document.full_access.json
 }
 

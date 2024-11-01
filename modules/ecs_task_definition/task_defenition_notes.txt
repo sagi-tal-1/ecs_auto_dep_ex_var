@@ -1,0 +1,56 @@
+rom all this information, I can see several critical issues:
+
+The service deployment has failed with the message "tasks failed to start"
+You have an Application Load Balancer (ALB) configured but no targets are registered
+The tasks are continuously getting stuck in "Provisioning" state
+
+Let's check some specific things:
+
+First, check if your container instance is actually registered with the cluster:
+
+bashCopyaws ecs list-container-instances --cluster demo-cluster-dae98b60
+
+Check your task definition. Run:
+
+bashCopyaws ecs describe-task-definition --task-definition nginx-task-dae98b60:1
+
+Check ECS agent connectivity to the cluster:
+
+bashCopysudo docker logs ecs-agent | grep -i cluster
+
+Check if your security groups are properly configured:
+
+
+The ALB security group should allow inbound traffic on port 80
+The EC2 instance security group should allow inbound traffic from the ALB security group
+The EC2 instance security group should allow outbound traffic to pull Docker images
+
+Key points to verify:
+
+Does your task definition include:
+
+The correct port mappings for nginx (port 80)
+The correct network mode (should be "bridge" since that's what we see in your EC2)
+Proper healthcheck configuration
+
+
+Does your service configuration include:
+
+The correct target group
+The correct container name and port in the load balancer configuration
+
+
+
+Could you please run the commands above and also check:
+
+The task definition details from AWS console (ECS → Task Definitions → nginx-task-dae98b60:1)
+The security group configurations for both the ALB and EC2 instance
+
+Based on the symptoms, I suspect one of these issues:
+
+The container instance isn't properly registered with the cluster
+The task definition has incorrect port mappings or network configuration
+Security group rules are preventing proper communication between ALB and containers
+The ECS agent doesn't have proper permissions to register tasks
+
+Once you provide this information, we can identify the exact issue and fix it. CopyRetryClaude does not have the ability to run the code it generates yet.Claude can make mistakes. Please double-check responses.

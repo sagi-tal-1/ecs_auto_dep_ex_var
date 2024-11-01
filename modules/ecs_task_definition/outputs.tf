@@ -1,3 +1,5 @@
+#moduls/ecs_task_definition/output.tf
+
 output "task_definition_arn" {
   value = aws_ecs_task_definition.app.arn
 }

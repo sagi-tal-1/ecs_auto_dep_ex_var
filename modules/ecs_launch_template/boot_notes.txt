@@ -1,0 +1,1535 @@
+Search for errors in the ECS agent logs:
+
+sudo grep -i error /var/log/ecs/ecs-agent.log
+
+
+
+Insert at cursor
+bash
+Search for errors in the system journal for the ECS service:
+
+sudo journalctl -u ecs | grep -i error
+
+
+
+Insert at cursor
+bash
+Search for errors in the Docker logs:
+
+sudo docker logs ecs-agent 2>&1 | grep -i error
+
+
+
+Insert at cursor
+bash
+Search for errors in the system log:
+
+sudo grep -i error /var/log/messages
+
+
+
+Insert at cursor
+bash
+If you want to see the last few lines of the ECS agent log file and follow new entries:
+
+sudo tail -f /var/log/ecs/ecs-agent.log | grep -i error
+
+
+
+Insert at cursor
+bash
+To search for warnings as well as errors: [1]
+
+sudo grep -E -i "error|warning" /var/log/ecs/ecs-agent.log
+
+
+
+Insert at cursor
+bash
+If you want to see the context around the errors (3 lines before and after):
+
+sudo grep -i error /var/log/ecs/ecs-agent.log -C 3
+
+
+
+Insert at cursor
+bash
+To search for a specific type of error, you can add more specific terms. For example, to search for network-related errors:
+
+sudo grep -i "error.*network" /var/log/ecs/ecs-agent.log
+
+
+
+Insert at cursor
+bash
+If you want to search all log files in the ECS log directory:
+
+sudo grep -r -i error /var/log/ecs/
+
+
+
+
+
+
+
+982349872439875302584-095
+
+#!/bin/bash
+# Enhanced Robust Docker Installation Script
+
+# Source the logging utility
+source ./enhanced_logging.sh
+
+# Global variables to track script execution status
+TOTAL_STEPS=0
+SUCCESSFUL_STEPS=0
+FAILED_STEPS=0
+ERRORS=()
+LINUX_DISTRO=""
+
+function track_step() {
+    local status=$1
+    local description="$2"
+    TOTAL_STEPS=$((TOTAL_STEPS + 1))
+
+    if [ "$status" -eq 0 ]; then
+        SUCCESSFUL_STEPS=$((SUCCESSFUL_STEPS + 1))
+        log "INFO" "✅ Step Successful: $description"
+    else
+        FAILED_STEPS=$((FAILED_STEPS + 1))
+        log "ERROR" "❌ Step Failed: $description"
+        ERRORS+=("$description")
+    fi
+}
+
+function safe_execute() {
+    local command="$1"
+    local description="$2"
+    local error_message="${3:-Execution failed}"
+    local ignore_failure="${4:-false}"
+
+    log "INFO" "Executing: $description"
+    
+    if output=$(eval "$command" 2>&1); then
+        track_step 0 "$description"
+        return 0
+    else
+        log "WARNING" "$error_message: $output"
+        
+        if [ "$ignore_failure" = "true" ]; then
+            track_step 0 "$description (Ignored)"
+            return 0
+        else
+            track_step 1 "$description"
+            return 1
+        fi
+    fi
+}
+
+function detect_linux_distribution() {
+    if [ -f /etc/os-release ]; then
+        . /etc/os-release
+        LINUX_DISTRO=$ID
+        log "INFO" "Detected Linux Distribution: $LINUX_DISTRO"
+    else
+        log "ERROR" "Unable to detect Linux distribution"
+        return 1
+    fi
+}
+
+function prerequisites() {
+    log "INFO" "🔍 Checking system prerequisites"
+
+    # Check for root privileges
+    if [[ $EUID -ne 0 ]]; then
+        log "ERROR" "This script must be run as root"
+        return 1
+    fi
+
+    # Detect distribution
+    detect_linux_distribution
+
+    # Check for required utilities
+    local required_utils=("curl" "gpg" "systemctl")
+    for util in "${required_utils[@]}"; do
+        if ! command -v "$util" &> /dev/null; then
+            log "ERROR" "Required utility $util is not installed"
+            return 1
+        fi
+    done
+
+    track_step 0 "System Prerequisites Check"
+    return 0
+}
+
+function install_docker() {
+    log "INFO" "🐳 Starting Docker installation process"
+
+    case "$LINUX_DISTRO" in
+        ubuntu|debian)
+            # Update package index
+            safe_execute "apt-get update" "Updating package index" "Failed to update package index"
+
+            # Install dependencies
+            safe_execute "apt-get install -y apt-transport-https ca-certificates curl gnupg lsb-release" \
+                "Installing Docker dependencies" "Failed to install dependencies"
+
+            # Add Docker's official GPG key
+            safe_execute "curl -fsSL https://download.docker.com/linux/$LINUX_DISTRO/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg" \
+                "Adding Docker GPG key" "Failed to add Docker GPG key"
+
+            # Set up stable repository
+            safe_execute "echo \"deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/$LINUX_DISTRO $(lsb_release -cs) stable\" | tee /etc/apt/sources.list.d/docker.list > /dev/null" \
+                "Setting up Docker repository" "Failed to set up Docker repository"
+
+            # Install Docker Engine
+            safe_execute "apt-get update" "Updating package index after adding repository" "Failed to update"
+            safe_execute "apt-get install -y docker-ce docker-ce-cli containerd.io" \
+                "Installing Docker Engine" "Failed to install Docker"
+            ;;
+
+        rhel|centos|fedora|amazonlinux)
+            # Remove older versions
+            safe_execute "yum remove -y docker docker-client docker-client-latest docker-common docker-latest docker-latest-logrotate docker-logrotate docker-engine" \
+                "Removing existing Docker packages" "Failed to remove existing packages" true
+
+            # Install dependencies
+            safe_execute "yum install -y yum-utils" "Installing yum-utils" "Failed to install yum-utils"
+
+            # Add Docker repository
+            safe_execute "yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo" \
+                "Adding Docker repository" "Failed to add Docker repository"
+
+            # Install Docker Engine
+            safe_execute "yum install -y docker-ce docker-ce-cli containerd.io" \
+                "Installing Docker Engine" "Failed to install Docker"
+            ;;
+
+        *)
+            log "ERROR" "Unsupported distribution: $LINUX_DISTRO"
+            return 1
+            ;;
+    esac
+
+    # Enable and start Docker service
+    safe_execute "systemctl enable docker" "Enabling Docker service" "Failed to enable Docker"
+    safe_execute "systemctl start docker" "Starting Docker service" "Failed to start Docker"
+
+    # Verify installation
+    safe_execute "docker --version" "Checking Docker version" "Docker version check failed"
+    
+    # Optional: Run hello-world to verify installation
+    safe_execute "docker run --rm hello-world" "Verifying Docker installation" "Hello-world container test failed" true
+
+    return 0
+}
+
+function script_summary() {
+    echo -e "\n📊 Docker Installation Summary:"
+    echo "Total Steps: $TOTAL_STEPS"
+    echo "Successful Steps: $SUCCESSFUL_STEPS"
+    echo "Failed Steps: $FAILED_STEPS"
+
+    if [ ${#ERRORS[@]} -gt 0 ]; then
+        echo -e "\n🚨 Detailed Errors:"
+        for error in "${ERRORS[@]}"; do
+            echo "  - $error"
+        done
+        log "ERROR" "Docker installation completed with ${#ERRORS[@]} errors"
+        exit 1
+    else
+        log "INFO" "✨ Docker installation completed successfully"
+        exit 0
+    fi
+}
+
+# Main execution block
+main() {
+    # Prerequisite checks
+    prerequisites || exit 1
+
+    # Execute Docker installation
+    install_docker
+
+    # Generate summary
+    script_summary
+
+
+
+
+
+987657696969
+[root@ip-10-0-0-227 ~]# nano enhanced_docker_installation.sh 
+[root@ip-10-0-0-227 ~]# /. enhanced_docker_installation.sh 
+bash: /.: Is a directory
+[root@ip-10-0-0-227 ~]# chmod +x enhanced_logging.sh enhanced_docker_installation.sh enhanced_ecs_installation.sh enhanced_cleanup.sh
+[root@ip-10-0-0-227 ~]# ./ enhanced_docker_installation.sh 
+bash: ./: Is a directory
+[root@ip-10-0-0-227 ~]# nano enhanced_docker_installation.sh 
+[root@ip-10-0-0-227 ~]# ./ enhanced_docker_installation.sh 
+bash: ./: Is a directory
+[root@ip-10-0-0-227 ~]# sudo bash enhanced_docker_installation.sh 
+[2024-10-31 13:38:18] [INFO] [prerequisites:14] Checking system prerequisites
+[2024-10-31 13:38:18] [INFO] [detect_linux_distribution:14] Detected Linux Distribution: amzn
+[2024-10-31 13:38:18] [INFO] [track_step:14] Step Successful: System Prerequisites Check
+[2024-10-31 13:38:18] [INFO] [install_docker:14] Starting Docker installation process
+[2024-10-31 13:38:18] [ERROR] [install_docker:14] Unsupported distribution: amzn
+
+Docker Installation Summary:
+Total Steps: 1
+Successful Steps: 1
+Failed Steps: 0
+[2024-10-31 13:38:18] [INFO] [script_summary:14] Docker installation completed successfully
+[root@ip-10-0-0-227 ~]# nano enhanced_ecs_installation.sh 
+[root@ip-10-0-0-227 ~]# sudo bash enhanced_ecs_installation.sh 
+[2024-10-31 13:40:50] [INFO] [prerequisites:14] Checking system prerequisites
+[2024-10-31 13:40:50] [ERROR] [prerequisites:14] Required utility aws is not installed
+
+
+
+
+
+#!/bin/bash
+# Enhanced Robust Docker Installation Script
+
+# Source the logging utility
+source ./enhanced_logging.sh
+
+# Global variables to track script execution status
+TOTAL_STEPS=0
+SUCCESSFUL_STEPS=0
+FAILED_STEPS=0
+ERRORS=()
+LINUX_DISTRO=""
+
+function track_step() {
+    local status=$1
+    local description="$2"
+    TOTAL_STEPS=$((TOTAL_STEPS + 1))
+
+    if [ "$status" -eq 0 ]; then
+        SUCCESSFUL_STEPS=$((SUCCESSFUL_STEPS + 1))
+        log "INFO" "✅ Step Successful: $description"
+    else
+        FAILED_STEPS=$((FAILED_STEPS + 1))
+        log "ERROR" "❌ Step Failed: $description"
+        ERRORS+=("$description")
+    fi
+}
+
+function safe_execute() {
+    local command="$1"
+    local description="$2"
+    local error_message="${3:-Execution failed}"
+    local ignore_failure="${4:-false}"
+
+    log "INFO" "Executing: $description"
+    
+    if output=$(eval "$command" 2>&1); then
+        track_step 0 "$description"
+        return 0
+    else
+        log "WARNING" "$error_message: $output"
+        
+        if [ "$ignore_failure" = "true" ]; then
+            track_step 0 "$description (Ignored)"
+            return 0
+        else
+            track_step 1 "$description"
+            return 1
+        fi
+    fi
+}
+
+function detect_linux_distribution() {
+    if [ -f /etc/os-release ]; then
+        . /etc/os-release
+        LINUX_DISTRO=$ID
+        log "INFO" "Detected Linux Distribution: $LINUX_DISTRO"
+    else
+        log "ERROR" "Unable to detect Linux distribution"
+        return 1
+    fi
+}
+
+function prerequisites() {
+    log "INFO" "🔍 Checking system prerequisites"
+
+    # Check for root privileges
+    if [[ $EUID -ne 0 ]]; then
+        log "ERROR" "This script must be run as root"
+        return 1
+    fi
+
+    # Detect distribution
+    detect_linux_distribution
+
+    # Check for required utilities
+    local required_utils=("curl" "gpg" "systemctl")
+    for util in "${required_utils[@]}"; do
+        if ! command -v "$util" &> /dev/null; then
+            log "ERROR" "Required utility $util is not installed"
+            return 1
+        fi
+    done
+
+    track_step 0 "System Prerequisites Check"
+    return 0
+}
+
+function install_docker() {
+    log "INFO" "🐳 Starting Docker installation process"
+
+    case "$LINUX_DISTRO" in
+        ubuntu|debian)
+            # Ubuntu/Debian installation steps (unchanged)
+            ;;
+        rhel|centos|fedora|amazonlinux)
+            # Remove older versions
+            safe_execute "yum remove -y docker docker-client docker-client-latest docker-common docker-latest docker-latest-logrotate docker-logrotate docker-engine" \
+                "Removing existing Docker packages" "Failed to remove existing packages" true
+
+            # Install dependencies
+            safe_execute "yum install -y yum-utils" "Installing yum-utils" "Failed to install yum-utils"
+
+            # Add Docker repository
+            safe_execute "yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo" \
+                "Adding Docker repository" "Failed to add Docker repository"
+
+            # Install Docker Engine
+            safe_execute "yum install -y docker-ce docker-ce-cli containerd.io" \
+                "Installing Docker Engine" "Failed to install Docker"
+            ;;
+
+        *)
+            log "ERROR" "Unsupported distribution: $LINUX_DISTRO"
+            return 1
+            ;;
+    esac
+
+    # Enable and start Docker service
+    safe_execute "systemctl enable docker" "Enabling Docker service" "Failed to enable Docker"
+    safe_execute "systemctl start docker" "Starting Docker service" "Failed to start Docker"
+
+    # Verify installation
+    safe_execute "docker --version" "Checking Docker version" "Docker version check failed"
+    
+    # Optional: Run hello-world to verify installation
+    safe_execute "docker run --rm hello-world" "Verifying Docker installation" "Hello-world container test failed" true
+
+    return 0
+}
+
+function script_summary() {
+    echo -e "\n📊 Docker Installation Summary:"
+    echo "Total Steps: $TOTAL_STEPS"
+    echo "Successful Steps: $SUCCESSFUL_STEPS"
+    echo "Failed Steps: $FAILED_STEPS"
+
+    if [ ${#ERRORS[@]} -gt 0 ]; then
+        echo -e "\n🚨 Detailed Errors:"
+        for error in "${ERRORS[@]}"; do
+            echo "  - $error"
+        done
+        log "ERROR" "Docker installation completed with ${#ERRORS[@]} errors"
+        exit 1
+    else
+        log "INFO" "✨ Docker installation completed successfully"
+        exit 0
+    fi
+}
+
+# Main execution block
+main() {
+    # Prerequisite checks
+    prerequisites || exit 1
+
+    # Execute Docker installation
+    install_docker
+
+    # Generate summary
+    script_summary
+
+
+
+
+
+
+root@ip-10-0-0-227 ~]# ./enhanced_docker_installation.sh 
+Loaded plugins: priorities, update-motd, upgrade-helper
+Package wget-1.14-18.amzn2.1.x86_64 already installed and latest version
+Nothing to do
+[2024-10-31 14:22:35] [INFO] Checking system prerequisites
+[2024-10-31 14:22:35] [INFO] Detected Linux Distribution: amzn
+[2024-10-31 14:22:35] [INFO] Starting Docker installation process
+[2024-10-31 14:22:35] [INFO] Executing: Downloading Docker binary
+[2024-10-31 14:22:36] [INFO] Step Successful: Downloading Docker binary
+[2024-10-31 14:22:36] [INFO] Executing: Extracting Docker
+[2024-10-31 14:22:38] [INFO] Step Successful: Extracting Docker
+[2024-10-31 14:22:38] [INFO] Executing: Installing Docker binaries
+[2024-10-31 14:22:39] [INFO] Step Successful: Installing Docker binaries
+[2024-10-31 14:22:39] [INFO] Executing: Creating Docker group
+[2024-10-31 14:22:39] [INFO] Step Successful: Creating Docker group
+[2024-10-31 14:22:39] [INFO] Executing: Reloading systemd
+[2024-10-31 14:22:39] [INFO] Step Successful: Reloading systemd
+[2024-10-31 14:22:39] [INFO] Executing: Enabling Docker service
+[2024-10-31 14:22:39] [INFO] Step Successful: Enabling Docker service
+[2024-10-31 14:22:39] [INFO] Executing: Starting Docker service
+[2024-10-31 14:22:39] [INFO] Step Successful: Starting Docker service
+[2024-10-31 14:22:39] [INFO] Executing: Checking Docker version
+[2024-10-31 14:22:39] [INFO] Step Successful: Checking Docker version
+
+Docker Installation Summary:
+Total Steps: 8
+Successful Steps: 8
+Failed Steps: 0
+[2024-10-31 14:22:39] [INFO] Docker installation completed successfully
+[root@ip-10-0-0-227 ~]# ./enhanced_ecs_installation.sh 
+[2024-10-31 14:22:49] [INFO] [prerequisites:14] Checking system prerequisites
+[2024-10-31 14:22:49] [ERROR] [prerequisites:14] Required utility docker is not installed
+
+ECS Agent Installation Summary:
+Total Steps: 0
+Successful Steps: 0
+Failed Steps: 0
+[2024-10-31 14:22:49] [INFO] [script_summary:14] ECS Agent installation completed successfully
+[root@ip-10-0-0-227 ~]# docker ps
+bash: docker: command not found
+[root@ip-10-0-0-227 ~]# docker ps
+bash: docker: command not found
+[root@ip-10-0-0-227 ~]# 
+
+
+
+
+
+
+65465486548658
+
+#!/bin/bash
+# Enhanced Robust ECS Installation and Configuration Script
+
+# Source the logging utility
+source ./enhanced_logging.sh
+
+# Global variables to track script execution status
+TOTAL_STEPS=0
+SUCCESSFUL_STEPS=0
+FAILED_STEPS=0
+ERRORS=()
+LINUX_DISTRO=""
+
+function track_step() {
+    local status=$1
+    local description="$2"
+    TOTAL_STEPS=$((TOTAL_STEPS + 1))
+
+    if [ "$status" -eq 0 ]; then
+        SUCCESSFUL_STEPS=$((SUCCESSFUL_STEPS + 1))
+        log "INFO" "✅ Step Successful: $description"
+    else
+        FAILED_STEPS=$((FAILED_STEPS + 1))
+        log "ERROR" "❌ Step Failed: $description"
+        ERRORS+=("$description")
+    fi
+}
+
+function safe_execute() {
+    local command="$1"
+    local description="$2"
+    local error_message="${3:-Execution failed}"
+    local ignore_failure="${4:-false}"
+
+    log "INFO" "Executing: $description"
+    
+    if output=$(eval "$command" 2>&1); then
+        track_step 0 "$description"
+        return 0
+    else
+        log "WARNING" "$error_message: $output"
+        if [ "$ignore_failure" = "true" ]; then
+            track_step 0 "$description (Ignored)"
+            return 0
+        else
+            track_step 1 "$description"
+            return 1
+        fi
+    fi
+}
+
+function prerequisites() {
+    log "INFO" "🔍 Checking system prerequisites"
+
+    # Check for root privileges
+    if [[ $EUID -ne 0 ]]; then
+        log "ERROR" "This script must be run as root"
+        return 1
+    fi
+
+    # Check for Amazon Linux
+    if ! grep -q 'Amazon Linux' /etc/system-release; then
+        log "ERROR" "This script is designed specifically for Amazon Linux"
+        return 1
+    fi
+
+    # Check for required utilities
+    local required_utils=("aws" "docker" "systemctl")
+    for util in "${required_utils[@]}"; do
+        if ! command -v "$util" &> /dev/null; then
+            log "ERROR" "Required utility $util is not installed"
+            return 1
+        fi
+    done
+
+    track_step 0 "System Prerequisites Check"
+    return 0
+}
+
+function verify_aws_configuration() {
+    log "INFO" "🔐 Verifying AWS CLI configuration"
+      # Check AWS CLI configuration
+    if ! aws configure list &> /dev/null; then
+        log "ERROR" "AWS CLI is not configured. Please run 'aws configure'"
+        return 1
+    fi
+
+    # Verify AWS credentials
+    safe_execute "aws sts get-caller-identity" "Validating AWS credentials" "AWS credentials validation failed"
+}
+
+function install_ecs_agent() {
+    log "INFO" "🚢 Starting ECS Agent installation and configuration"
+
+    # Update system packages
+    safe_execute "yum update -y" "Updating system packages" "System package update failed"
+
+    # Install AWS CLI and ECS dependencies
+    safe_execute "yum install -y aws-cli docker ecs-init" \
+        "Installing ECS dependencies" "Failed to install ECS dependencies"
+# Configure Docker daemon
+    safe_execute "tee /etc/docker/daemon.json > /dev/null << EOT
+{
+    \"cluster\": \"default\",
+    \"log-driver\": \"json-file\",
+    \"log-opts\": {
+        \"max-size\": \"10m\",
+        \"max-file\": \"3\"
+    }
+}
+EOT" "Configuring Docker daemon" "Docker daemon configuration failed"
+
+    # Create ECS configuration directory
+    safe_execute "mkdir -p /etc/ecs" "Creating ECS configuration directory" "Failed to create ECS directory"
+
+    # Configure ECS Agent
+    safe_execute "tee /etc/ecs/ecs.config > /dev/null << EOT
+ECS_CLUSTER=default
+ECS_ENABLE_TASK_IAM_ROLE=true
+ECS_ENABLE_TASK_IAM_ROLE_NETWORK_HOST=true
+ECS_LOGLEVEL=info
+EOT" "Configuring ECS Agent" "ECS Agent configuration failed"
+
+    # Enable and start services
+    local services=("docker" "ecs")
+    for service in "${services[@]}"; do
+        safe_execute "systemctl enable $service" "Enabling $service service" "Failed to enable $service"
+        safe_execute "systemctl start $service" "Starting $service service" "Failed to start $service"
+    done
+
+    # Verify ECS and Docker setup
+    safe_execute "docker ps" "Checking Docker functionality" "Docker ps command failed"
+    safe_execute "docker images" "Listing Docker images" "Docker images listing failed"
+    safe_execute "docker info" "Checking Docker system info" "Docker info check failed"
+
+    return 0
+}}
+
+function script_summary() {
+    echo -e "\n📊 ECS Agent Installation Summary:"
+    echo "Total Steps: $TOTAL_STEPS"
+    echo "Successful Steps: $SUCCESSFUL_STEPS"
+    echo "Failed Steps: $FAILED_STEPS"
+
+    if [ ${#ERRORS[@]} -gt 0 ]; then
+        echo -e "\n Detailed Errors:"
+        for error in "${ERRORS[@]}"; do
+            echo "  - $error"
+        done
+        log "ERROR" "ECS Agent installation completed with ${#ERRORS[@]} errors"
+        exit 1
+    else
+        log "INFO" "✨ ECS Agent installation completed successfully"
+        exit 0
+    fi
+}
+
+# Main execution block
+main() {
+    # Prerequisite checks
+    prerequisites || exit 1
+
+    # Verify AWS configuration
+    verify_aws_configuration || exit 1
+
+    # Execute ECS Agent installation
+    install_ecs_agent
+
+    # Generate summary
+    }
+
+# Trap to ensure summary is always called
+trap script_summary EXIT
+
+# Execute main function
+main
+
+
+
+
+
+
+2024-10-31 15:14:06] [WARNING] Failed to install Docker: Loaded plugins: priorities, update-motd, upgrade-helper
+https://download.docker.com/linux/centos/2/x86_64/stable/repodata/repomd.xml: [Errno 14] HTTPS Error 404 - Not Found
+Trying other mirror.
+
+
+ One of the configured repositories failed (Docker CE Stable - x86_64),
+ and yum doesn't have enough cached data to continue. At this point the only
+ safe thing yum can do is fail. There are a few ways to work "fix" this:
+
+     1. Contact the upstream for the repository and get them to fix the problem.
+
+     2. Reconfigure the baseurl/etc. for the repository, to point to a working
+        upstream. This is most often useful if you are using a newer
+        distribution release than is supported by the repository (and the
+        packages for the previous distribution release still work).
+
+     3. Run the command with the repository temporarily disabled
+            yum --disablerepo=docker-ce-stable ...
+
+     4. Disable the repository permanently, so yum won't use it by default. Yum
+        will then just ignore the repository until you permanently enable it
+        again or use --enablerepo for temporary usage:
+
+            yum-config-manager --disable docker-ce-stable
+        or
+            subscription-manager repos --disable=docker-ce-stable
+
+     5. Configure the failing repository to be skipped, if it is unavailable.
+        Note that yum will try to contact the repo. when it runs most commands,
+        so will have to try and fail each time (and thus. yum will be be much
+        slower). If it is a very temporary problem though, this is often a nice
+        compromise:
+
+            yum-config-manager --save --setopt=docker-ce-stable.skip_if_unavailable=true
+
+failure: repodata/repomd.xml from docker-ce-stable: [Errno 256] No more mirrors to try.
+https://download.docker.com/linux/centos/2/x86_64/stable/repodata/repomd.xml: [Errno 14] HTTPS Error 404 - Not Found
+[2024-10-31 15:14:06] [ERROR]  Step Failed: Installing Docker
+[2024-10-31 15:14:06] [INFO] Executing: Creating Docker config directory
+[2024-10-31 15:14:06] [INFO]  Step Successful: Creating Docker config directory
+[2024-10-31 15:14:06] [INFO] Executing: Configuring Docker daemon
+[2024-10-31 15:14:06] [INFO]  Step Successful: Configuring Docker daemon
+[2024-10-31 15:14:06] [INFO]  Installing and configuring ECS Agent
+[2024-10-31 15:14:06] [INFO] Executing: Installing ECS Agent via Amazon Linux Extras
+[2024-10-31 15:14:09] [WARNING] Failed to install ECS Agent: Loaded plugins: priorities, update-motd, upgrade-helper
+Cleaning repos: amzn2-core amzn2extra-docker amzn2extra-ecs docker-ce-stable
+11 metadata files removed
+6 sqlite files removed
+0 metadata files removed
+Loaded plugins: priorities, update-motd, upgrade-helper
+https://download.docker.com/linux/centos/2/x86_64/stable/repodata/repomd.xml: [Errno 14] HTTPS Error 404 - Not Found
+Trying other mirror.
+
+
+ One of the configured repositories failed (Docker CE Stable - x86_64),
+ and yum doesn't have enough cached data to continue. At this point the only
+ safe thing yum can do is fail. There are a few ways to work "fix" this:
+
+     1. Contact the upstream for the repository and get them to fix the problem.
+
+     2. Reconfigure the baseurl/etc. for the repository, to point to a working
+        upstream. This is most often useful if you are using a newer
+        distribution release than is supported by the repository (and the
+        packages for the previous distribution release still work).
+
+     3. Run the command with the repository temporarily disabled
+            yum --disablerepo=docker-ce-stable ...
+
+     4. Disable the repository permanently, so yum won't use it by default. Yum
+        will then just ignore the repository until you permanently enable it
+        again or use --enablerepo for temporary usage:
+
+            yum-config-manager --disable docker-ce-stable
+        or
+            subscription-manager repos --disable=docker-ce-stable
+
+     5. Configure the failing repository to be skipped, if it is unavailable.
+        Note that yum will try to contact the repo. when it runs most commands,
+        so will have to try and fail each time (and thus. yum will be be much
+        slower). If it is a very temporary problem though, this is often a nice
+        compromise:
+
+            yum-config-manager --save --setopt=docker-ce-stable.skip_if_unavailable=true
+
+failure: repodata/repomd.xml from docker-ce-stable: [Errno 256] No more mirrors to try.
+https://download.docker.com/linux/centos/2/x86_64/stable/repodata/repomd.xml: [Errno 14] HTTPS Error 404 - Not Found
+Installation failed. Check that you have permissions to install.
+Installing ecs-init
+[2024-10-31 15:14:09] [ERROR]  Step Failed: Installing ECS Agent via Amazon Linux Extras
+[2024-10-31 15:14:09] [INFO] Executing: Creating ECS configuration directory
+[2024-10-31 15:14:09] [INFO]  Step Successful: Creating ECS configuration directory
+[2024-10-31 15:14:09] [INFO] Executing: Configuring ECS Agent
+[2024-10-31 15:14:09] [INFO]  Step Successful: Configuring ECS Agent
+[2024-10-31 15:14:09] [INFO] Executing: Enabling Docker service
+[2024-10-31 15:14:09] [INFO] Step Successful: Enabling Docker service
+[2024-10-31 15:14:09] [INFO] Executing: Starting Docker service
+[2024-10-31 15:14:09] [INFO]  Step Successful: Starting Docker service
+[2024-10-31 15:14:09] [INFO] Executing: Enabling ECS service
+[2024-10-31 15:14:09] [WARNING] Failed to enable ECS: Failed to execute operation: No such file or directory
+[2024-10-31 15:14:09] [ERROR] tep Failed: Enabling ECS service
+[2024-10-31 15:14:09] [INFO] Executing: Starting ECS service
+[2024-10-31 15:14:09] [WARNING] Failed to start ECS: Failed to start ecs.service: Unit not found.
+[2024-10-31 15:14:09] [ERROR] Step Failed: Starting ECS service
+[2024-10-31 15:14:09] [INFO] Executing: Checking Docker system info
+[2024-10-31 15:14:09] [INFO] Step Successful: Checking Docker system info
+[2024-10-31 15:14:09] [INFO] Executing: Checking Docker functionality
+[2024-10-31 15:14:09] [INFO] Step Successful: Checking Docker functionality
+
+ECS Agent Installation Summary:
+Total Steps: 15
+Successful Steps: 11
+Failed Steps: 4
+
+Detailed Errors:
+  - Installing Docker
+  - Installing ECS Agent via Amazon Linux Extras
+  - Enabling ECS service
+  - Starting ECS service
+[2024-10-31 15:14:09] [ERROR] ECS Agent installation completed with 4 errors
+
+eCS Agent Installation Summary:
+Total Steps: 15
+Successful Steps: 11
+Failed Steps: 4
+
+Detailed Errors:
+  - Installing Docker
+  - Installing ECS Agent via Amazon Linux Extras
+  - Enabling ECS service
+  - Starting ECS service
+[2024-10-31 15:14:09] [ERROR] ECS Agent installation completed with 4 errors
+[root@ip-10-0-0-227 ~]# 
+
+
+
+
+
+
+
+#!/bin/bash
+# Enhanced Robust ECS Installation and Configuration Script
+
+# Logging function
+log() {
+    local level="$1"
+    local message="$2"
+    echo "[$(date +'%Y-%m-%d %H:%M:%S')] [$level] $message"
+}
+
+# Global variables
+TOTAL_STEPS=0
+SUCCESSFUL_STEPS=0
+FAILED_STEPS=0
+ERRORS=()
+
+# Function to track step execution
+track_step() {
+    local status=$1
+    local description="$2"
+    TOTAL_STEPS=$((TOTAL_STEPS + 1))
+
+    if [ "$status" -eq 0 ]; then
+        SUCCESSFUL_STEPS=$((SUCCESSFUL_STEPS + 1))
+        log "INFO" "Step Successful: $description"
+    else
+        FAILED_STEPS=$((FAILED_STEPS + 1))
+        log "ERROR" "Step Failed: $description"
+        ERRORS+=("$description")
+    fi
+}
+
+# Safe command execution wrapper
+safe_execute() {
+    local command="$1"
+    local description="$2"
+    local error_message="${3:-Execution failed}"
+    local ignore_failure="${4:-false}"
+
+    log "INFO" "Executing: $description"
+    
+    if output=$(eval "$command" 2>&1); then
+        track_step 0 "$description"
+        return 0
+    else
+        log "WARNING" "$error_message: $output"
+        if [ "$ignore_failure" = "true" ]; then
+            track_step 0 "$description (Ignored)"
+            return 0
+        else
+            track_step 1 "$description"
+            return 1
+        fi
+    fi
+}
+
+# Prerequisite checks
+prerequisites() {
+    log "INFO" " Checking system prerequisites"
+
+    # Check for root privileges
+    if [[ $EUID -ne 0 ]]; then
+        log "ERROR" "This script must be run as root"
+        return 1
+    fi
+
+    # Check system compatibility
+    if [ ! -f /etc/system-release ]; then
+        log "ERROR" "Unable to determine system release"
+        return 1
+    fi
+
+    return 0
+}
+
+# Prepare Docker and ECS environment
+prepare_environment() {
+    log "INFO" " Preparing Docker and ECS environment"
+
+    # Remove existing Docker installations to prevent conflicts
+    safe_execute "yum remove -y docker docker-ce docker-engine docker-client docker-client-latest docker-common" \
+        "Removing existing Docker installations" "Failed to remove existing Docker" "true"
+
+    # Install required dependencies
+    safe_execute "yum install -y yum-utils device-mapper-persistent-data lvm2" \
+        "Installing system dependencies" "Failed to install system dependencies"
+
+    # Set up Docker repository
+    safe_execute "yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo" \
+        "Adding Docker repository" "Failed to add Docker repository"
+
+    # Install Docker
+    safe_execute "yum install -y docker-ce docker-ce-cli containerd.io" \
+        "Installing Docker" "Failed to install Docker"
+
+    # Create Docker configuration directory
+    safe_execute "mkdir -p /etc/docker" "Creating Docker config directory" "Failed to create Docker config directory"
+
+    # Configure Docker daemon
+    safe_execute "tee /etc/docker/daemon.json > /dev/null << EOT
+{
+    \"log-driver\": \"json-file\",
+    \"log-opts\": {
+        \"max-size\": \"10m\",
+        \"max-file\": \"3\"
+    },
+    \"storage-driver\": \"overlay2\"
+}
+EOT" "Configuring Docker daemon" "Docker daemon configuration failed"
+
+    return 0
+}
+
+# Install and configure ECS Agent
+install_ecs_agent() {
+    log "INFO" "Installing and configuring ECS Agent"
+
+    # Install ECS Agent
+    safe_execute "amazon-linux-extras install -y ecs" \
+        "Installing ECS Agent via Amazon Linux Extras" "Failed to install ECS Agent"
+
+    # Create ECS configuration directory
+    safe_execute "mkdir -p /etc/ecs" "Creating ECS configuration directory" "Failed to create ECS directory"
+
+    # Configure ECS Agent
+    safe_execute "tee /etc/ecs/ecs.config > /dev/null << EOT
+ECS_CLUSTER=default
+ECS_ENABLE_TASK_IAM_ROLE=true
+ECS_ENABLE_TASK_IAM_ROLE_NETWORK_HOST=true
+ECS_LOGLEVEL=info
+EOT" "Configuring ECS Agent" "ECS Agent configuration failed"
+
+    # Enable and start services
+    safe_execute "systemctl enable docker" "Enabling Docker service" "Failed to enable Docker"
+    safe_execute "systemctl start docker" "Starting Docker service" "Failed to start Docker"
+    safe_execute "systemctl enable ecs" "Enabling ECS service" "Failed to enable ECS"
+    safe_execute "systemctl start ecs" "Starting ECS service" "Failed to start ECS"
+
+    # Verify ECS Agent
+    safe_execute "docker info" "Checking Docker system info" "Docker info check failed"
+    safe_execute "docker ps" "Checking Docker functionality" "Docker ps command failed"
+
+    return 0
+}
+
+# Script summary and error reporting
+script_summary() {
+    echo -e "\nECS Agent Installation Summary:"
+    echo "Total Steps: $TOTAL_STEPS"
+    echo "Successful Steps: $SUCCESSFUL_STEPS"
+    echo "Failed Steps: $FAILED_STEPS"
+
+    if [ ${#ERRORS[@]} -gt 0 ]; then
+        echo -e "\nDetailed Errors:"
+        for error in "${ERRORS[@]}"; do
+            echo "  - $error"
+        done
+        log "ERROR" "ECS Agent installation completed with ${#ERRORS[@]} errors"
+        exit 1
+    else
+        log "INFO" "ECS Agent installation completed successfully"
+        exit 0
+    fi
+}
+
+# Main execution block
+main() {
+    # Prerequisite checks
+    prerequisites || exit 1
+
+    # Prepare Docker and ECS environment
+    prepare_environment || exit 1
+
+    # Execute ECS Agent installation
+    install_ecs_agent || exit 1
+
+    # Generate summary
+    script_summary
+}
+
+# Trap to ensure summary is always called
+trap script_summary EXIT
+
+# Execute main function
+main
+
+
+
+[2024-10-31 15:14:05] [INFO] Executing: Installing Docker
+[2024-10-31 15:14:06] [WARNING] Failed to install Docker: Loaded plugins: priorities, update-motd, upgrade-helper
+https://download.docker.com/linux/centos/2/x86_64/stable/repodata/repomd.xml: [Errno 14] HTTPS Error 404 - Not Found
+Trying other mirror.
+
+One of the configured repositories failed (Docker CE Stable - x86_64),
+ and yum doesn't have enough cached data to continue. At this point the only
+ safe thing yum can do is fail. There are a few ways to work "fix" this:
+
+     1. Contact the upstream for the repository and get them to fix the problem.
+
+     2. Reconfigure the baseurl/etc. for the repository, to point to a working
+        upstream. This is most often useful if you are using a newer
+        distribution release than is supported by the repository (and the
+        packages for the previous distribution release still work).
+
+     3. Run the command with the repository temporarily disabled
+            yum --disablerepo=docker-ce-stable ...
+
+     4. Disable the repository permanently, so yum won't use it by default. Yum
+        will then just ignore the repository until you permanently enable it
+        again or use --enablerepo for temporary usage:
+
+            yum-config-manager --disable docker-ce-stable
+        or
+            subscription-manager repos --disable=docker-ce-stable
+
+     5. Configure the failing repository to be skipped, if it is unavailable.
+        Note that yum will try to contact the repo. when it runs most commands,
+        so will have to try and fail each time (and thus. yum will be be much
+        slower). If it is a very temporary problem though, this is often a nice
+        compromise:
+
+            yum-config-manager --save --setopt=docker-ce-stable.skip_if_unavailable=true
+
+failure: repodata/repomd.xml from docker-ce-stable: [Errno 256] No more mirrors to try.
+https://download.docker.com/linux/centos/2/x86_64/stable/repodata/repomd.xml: [Errno 14] HTTPS Error 404 - Not Found
+[2024-10-31 15:14:06] [ERROR] Step Failed: Installing Docker
+[2024-10-31 15:14:06] [INFO] Executing: Creating Docker config directory
+
+[2024-10-31 15:14:06] [INFO] Executing: Installing ECS Agent via Amazon Linux Extras
+[2024-10-31 15:14:09] [WARNING] Failed to install ECS Agent: Loaded plugins: priorities, update-motd, upgrade-helper
+Cleaning repos: amzn2-core amzn2extra-docker amzn2extra-ecs docker-ce-stable
+11 metadata files removed
+6 sqlite files removed
+0 metadata files removed
+Loaded plugins: priorities, update-motd, upgrade-helper
+https://download.docker.com/linux/centos/2/x86_64/stable/repodata/repomd.xml: [Errno 14] HTTPS Error 404 - Not Found
+Trying other mirror.
+
+
+ One of the configured repositories failed (Docker CE Stable - x86_64),
+ and yum doesn't have enough cached data to continue. At this point the only
+ safe thing yum can do is fail. There are a few ways to work "fix" this:
+
+     1. Contact the upstream for the repository and get them to fix the problem.
+
+     2. Reconfigure the baseurl/etc. for the repository, to point to a working
+        upstream. This is most often useful if you are using a newer
+        distribution release than is supported by the repository (and the
+        packages for the previous distribution release still work).
+
+     3. Run the command with the repository temporarily disabled
+            yum --disablerepo=docker-ce-stable ...
+
+     4. Disable the repository permanently, so yum won't use it by default. Yum
+        will then just ignore the repository until you permanently enable it
+        again or use --enablerepo for temporary usage:
+
+            yum-config-manager --disable docker-ce-stable
+        or
+            subscription-manager repos --disable=docker-ce-stable
+
+     5. Configure the failing repository to be skipped, if it is unavailable.
+        Note that yum will try to contact the repo. when it runs most commands,
+        so will have to try and fail each time (and thus. yum will be be much
+        slower). If it is a very temporary problem though, this is often a nice
+        compromise:
+
+            yum-config-manager --save --setopt=docker-ce-stable.skip_if_unavailable=true
+
+failure: repodata/repomd.xml from docker-ce-stable: [Errno 256] No more mirrors to try.
+https://download.docker.com/linux/centos/2/x86_64/stable/repodata/repomd.xml: [Errno 14] HTTPS Error 404 - Not Found
+Installation failed. Check that you have permissions to install.
+Installing ecs-init
+[2024-10-31 15:14:09] [ERROR] Step Failed: Installing ECS Agent via Amazon Linux Extras
+
+Step Failed: Enabling ECS service
+[2024-10-31 15:14:09] [INFO] Executing: Starting ECS service
+[2024-10-31 15:14:09] [WARNING] Failed to start ECS: Failed to start ecs.service: Unit not found.
+[2024-10-31 15:14:09] [ERROR]
+Step Failed: Starting ECS service
+[2024-10-31 15:14:09] [INFO] Executing: Checking Docker system info
+
+
+ECS Agent Installation Summary:
+Total Steps: 15
+Successful Steps: 11
+Failed Steps: 4
+Detailed Errors:
+  - Installing Docker
+  - Installing ECS Agent via Amazon Linux Extras
+  - Enabling ECS service
+  - Starting ECS service
+[2024-10-31 15:14:09] [ERROR] ECS Agent installation completed with 4 errors
+Detailed Errors:
+  - Installing Docker
+  - Installing ECS Agent via Amazon Linux Extras
+  - Enabling ECS service
+  - Starting ECS service
+[2024-10-31 15:14:09] [ERROR] ECS Agent installation completed with 4 errors
+[root@ip-10-0-0-227 ~]# 
+
+
+
+
+#############################################
+#############################################
+#############################################
+#############################################
+
+##############     user data    #############
+
+# # Add logging function at the start
+# function log() {
+#     echo "[$(date '+%Y-%m-%d %H:%M:%S')]: $1"
+#     logger -t userdata "$1"
+# }
+
+# # Stop the services
+# log "Stopping ECS service"
+# sudo systemctl stop docker || log "Failed to stop docker service"
+# sudo systemctl stop ecs || log "Failed to stop ECS service"
+# sleep 5
+
+# # Update Docker
+# sudo yum update docker
+
+# # Start Docker
+# sudo systemctl start docker
+
+# #Create ECS config file
+# log "Creating ECS config"
+# sudo bash -c 'cat << EOF > /etc/ecs/ecs.config
+# ECS_CLUSTER=${cluster_name}
+# ECS_LOGLEVEL=debug
+# ECS_AVAILABLE_LOGGING_DRIVERS=["json-file","awslogs"]
+# ECS_ENABLE_CONTAINER_METADATA=true
+# ECS_ENGINE_TASK_CLEANUP_WAIT_DURATION=1h
+# ECS_IMAGE_CLEANUP_INTERVAL=10m
+# ECS_ENGINE_AUTH_TYPE=docker
+# ECS_ENGINE_AUTH_DATA={"https://index.docker.io/v1/": {"username": "${dockerhub_username}", "password": "${dockerhub_password}"}}
+# ECS_DATADIR=/data
+# ECS_ENABLE_SPOT_INSTANCE_DRAINING=true
+# ECS_CONTAINER_STOP_TIMEOUT=30s
+# ECS_CONTAINER_START_TIMEOUT=3m
+# EOF'
+
+
+# # Set proper permissions
+# log "Setting ECS config permissions"
+# sudo chmod 644 /etc/ecs/ecs.config
+
+# # Start ECS agent with platform specification
+# log "Starting ECS agent container"
+# sudo docker run --name ecs-agent \
+#     --detach=true \
+#     --restart=on-failure:10 \
+#     --volume=/var/run:/var/run \
+#     --volume=/var/log/ecs:/log \
+#     --volume=/var/lib/ecs/data:/data \
+#     --volume=/etc/ecs:/etc/ecs \
+#     --net=host \
+#     --env-file=/etc/ecs/ecs.config \
+#     --platform linux/amd64 \
+#     public.ecr.aws/ecs/amazon-ecs-agent:latest
+
+
+
+
+
+# # Uninstall Docker
+# log "Uninstalling Docker"
+# sudo yum remove docker docker-client docker-client-latest docker-common docker-latest docker-latest-logrotate docker-logrotate docker-engine -y || log "Failed to uninstall docker service"
+# sleep 10
+
+# # Uninstall the ECS agent
+# log "Uninstalling ECS agent"
+# sudo systemctl stop ecs || log "Failed to uninstall ECS service"
+# sudo rm -rf /etc/ecs /var/lib/ecs /var/log/ecs || log "Failed to uninstall ECS service"
+# sudo docker rm -f ecs-agent || log "Failed to uninstall ECS service"
+# sudo rm -f /etc/init/ecs.conf || log "Failed to uninstall ECS service"
+# sudo rm -f /etc/systemd/system/ecs.service || log "Failed to uninstall ECS service"
+# sudo systemctl daemon-reload || log "Failed to uninstall ECS service"
+# sleep 10
+
+# # Remove residual files but preserve configs
+# log "Cleaning up residual files"
+# sudo rm -rf /var/log/ecs/* /var/lib/ecs/data/* /var/cache/yum/* /var/lib/docker/*
+
+# # Install Docker
+# log "Installing Docker"
+# sudo amazon-linux-extras install docker -y || log "Failed to install Docker"
+# sudo systemctl start docker || log "Failed to start docker"
+# sudo systemctl enable docker || log "Failed to enable docker"
+# sleep 10
+
+# # Install ECS
+# log "Installing ECS"
+# sudo amazon-linux-extras install ecs -y || log "Failed to install ECS"
+# sleep 5
+
+# # Create directories with proper permissions
+# log "Creating ECS directories"
+# sudo mkdir -p /etc/ecs
+# sudo mkdir -p /var/lib/ecs/data
+# sudo mkdir -p /var/log/ecs
+
+# # Create ECS config file
+# log "Creating ECS config"
+# sudo bash -c 'cat << EOF > /etc/ecs/ecs.config
+# ECS_CLUSTER=${cluster_name}
+# ECS_LOGLEVEL=debug
+# ECS_AVAILABLE_LOGGING_DRIVERS=["json-file","awslogs"]
+# ECS_ENABLE_CONTAINER_METADATA=true
+# ECS_ENGINE_TASK_CLEANUP_WAIT_DURATION=1h
+# ECS_IMAGE_CLEANUP_INTERVAL=10m
+# ECS_ENGINE_AUTH_TYPE=docker
+# ECS_ENGINE_AUTH_DATA={"https://index.docker.io/v1/": {"username": "${dockerhub_username}", "password": "${dockerhub_password}"}}
+# ECS_DATADIR=/data
+# ECS_ENABLE_SPOT_INSTANCE_DRAINING=true
+# ECS_CONTAINER_STOP_TIMEOUT=30s
+# ECS_CONTAINER_START_TIMEOUT=3m
+# EOF'
+
+# # Set proper permissions
+# log "Setting ECS config permissions"
+# sudo chmod 644 /etc/ecs/ecs.config
+
+# # Start ECS agent with platform specification
+# log "Starting ECS agent container"
+# sudo docker run --name ecs-agent \
+#     --detach=true \
+#     --restart=on-failure:10 \
+#     --volume=/var/run:/var/run \
+#     --volume=/var/log/ecs:/log \
+#     --volume=/var/lib/ecs/data:/data \
+#     --volume=/etc/ecs:/etc/ecs \
+#     --net=host \
+#     --env-file=/etc/ecs/ecs.config \
+#     --platform linux/amd64 \
+#     public.ecr.aws/ecs/amazon-ecs-agent:latest
+
+# # Verify ECS agent is running
+# log "Verifying ECS agent status"
+# sleep 10
+# if sudo docker ps | grep -q ecs-agent; then
+#     log "ECS agent started successfully"
+# else
+#     log "ECS agent failed to start"
+#     sudo docker logs ecs-agent
+# fi
+
+# # Enable automatic start of ECS agent on system boot
+# log "Creating systemd service for ECS"
+# sudo bash -c 'cat << EOF > /etc/systemd/system/ecs-agent.service
+# [Unit]
+# Description=AWS ECS Agent
+# After=docker.service
+# Requires=docker.service
+
+# [Service]
+# Type=simple
+# ExecStartPre=-/usr/bin/docker rm -f ecs-agent
+# ExecStart=/usr/bin/docker run --name ecs-agent \
+#     --restart=on-failure:10 \
+#     --volume=/var/run:/var/run \
+#     --volume=/var/log/ecs:/log \
+#     --volume=/var/lib/ecs/data:/data \
+#     --volume=/etc/ecs:/etc/ecs \
+#     --net=host \
+#     --env-file=/etc/ecs/ecs.config \
+#     --platform linux/amd64 \
+#     public.ecr.aws/ecs/amazon-ecs-agent:latest
+# ExecStop=/usr/bin/docker stop ecs-agent
+# Restart=always
+
+# [Install]
+# WantedBy=multi-user.target
+# EOF'
+
+# # Enable and start the systemd service
+# log "Enabling and starting ECS agent service"
+# sudo systemctl daemon-reload
+# sudo systemctl enable ecs-agent
+# sudo systemctl start ecs-agent
+
+# log "UserData script completed"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# #!/bin/bash
+
+# # Redirect output to logs
+# exec > >(tee /var/log/user-data.log)
+# exec 2> >(tee /var/log/user-data.error.log >&2)
+
+# # Function for logging
+# log() {
+#     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
+# }
+
+# log "Starting user data script execution"
+# log "Testing log output"
+
+# # Wait for cloud-init to complete
+# cloud-init status --wait
+
+# # Stop the ECS service that starts automatically
+
+# #Stop the services
+# log "Stopping ECS service"
+
+# sudo systemctl stop docker || log "Failed to stop docker service"
+# sudo systemctl stop ecs || log "Failed to stop ECS service"
+# sleep 10
+
+# #Uninstall Docker
+# sudo yum remove docker docker-client docker-client-latest docker-common docker-latest docker-latest-logrotate docker-logrotate docker-engine -y || log "Failed to uninstall docker service"
+# sleep 10
+
+# #Uninstall the ECS agent
+# sudo systemctl stop ecs || log "Failed to uninstall ECS service"
+# sudo rm -rf /etc/ecs /var/lib/ecs /var/log/ecs || log "Failed to uninstall ECS service"
+# sudo docker rm -f ecs-agent || log "Failed to uninstall ECS service"
+# sudo rm -f /etc/init/ecs.conf || log "Failed to uninstall ECS service"
+# sudo rm -f /etc/systemd/system/ecs.service || log "Failed to uninstall ECS service"
+# sudo systemctl daemon-reload || log "Failed to uninstall ECS service"
+# sleep 10
+
+# sudo rm -f /etc/init/ecs.conf || log "Failed to remove service"
+# sleep 10
+
+# # Remove residual files but preserve configs
+# sudo rm -rf /var/log/ecs/* /var/lib/ecs/data/* /var/cache/yum/* /var/lib/docker/*
+
+
+# #Install Docker
+# sudo amazon-linux-extras install docker -y || log "Failed to stop ECS service"
+# sudo systemctl start docker || log "Failed to start docker "
+# sudo systemctl enable docker || log "Failed to enable docker"
+# sleep 10
+
+# sudo amazon-linux-extras install ecs -y
+
+
+# # Create ECS config directory
+# mkdir -p /etc/ecs
+# mkdir -p /var/lib/ecs/data
+
+# # Create ECS config file
+# cat << 'EOF' > /etc/ecs/ecs.config
+# ECS_CLUSTER=${cluster_name}
+# ECS_LOGLEVEL=debug
+# ECS_AVAILABLE_LOGGING_DRIVERS=["json-file","awslogs"]
+# ECS_ENABLE_CONTAINER_METADATA=true
+# ECS_ENGINE_TASK_CLEANUP_WAIT_DURATION=1h
+# ECS_IMAGE_CLEANUP_INTERVAL=10m
+# ECS_ENGINE_AUTH_TYPE=docker
+# ECS_ENGINE_AUTH_DATA={"https://index.docker.io/v1/": {"username": "${dockerhub_username}", "password": "${dockerhub_password}"}}
+# ECS_DATADIR=/data
+# ECS_ENABLE_SPOT_INSTANCE_DRAINING=true
+# ECS_CONTAINER_STOP_TIMEOUT=30s
+# ECS_CONTAINER_START_TIMEOUT=3m
+# EOF
+# sleep 10
+
+# # Set proper permissions
+# chmod 644 /etc/ecs/ecs.config
+
+# # start the ECS service
+# sudo systemctl start ecs
+
+# # enable the ECS service
+# sudo systemctl enable ecs
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# log "Stopping ECS service"
+# systemctl stop ecs.service || log "Failed to stop ECS service"
+
+# # Configure ECS agent
+# log "Configuring ECS agent"
+# cat << EOF > /etc/ecs/ecs.config
+# ECS_CLUSTER=demo-cluster-d5ba93f0
+# ECS_LOGLEVEL=debug
+# ECS_AVAILABLE_LOGGING_DRIVERS=["json-file","awslogs"]
+# ECS_ENABLE_CONTAINER_METADATA=true
+# EOF
+
+# # Check if the config file was created successfully
+# if [ ! -f /etc/ecs/ecs.config ]; then
+#     log "ERROR: Failed to create ECS config file"
+#     exit 1
+# fi
+
+# log "ECS config file created successfully"
+
+# # Start the ECS service
+# log "Starting ECS service"
+# systemctl start ecs.service || log "Failed to start ECS service"
+
+# # Verify ECS agent
+# log "Verifying ECS agent status..."
+# for i in {1..5}; do
+#     if systemctl is-active ecs.service > /dev/null; then
+#         log "ECS agent is running"
+#         break
+#     fi
+#     if [ $i -eq 5 ]; then
+#         log "ERROR: ECS agent failed to start"
+#         systemctl status ecs.service
+#         exit 1
+#     fi
+#     log "Waiting for ECS agent... attempt $i/5"
+#     sleep 10
+# done
+
+# log "Checking ECS agent logs"
+# journalctl -u ecs.service --no-pager | tail -n 50
+
+# log "User data script completed successfully"
+
+
+#sudo rm -rf /var/log/ecs /var/lib/ecs /etc/ecs || log "Failed to remove service"
+
+
+# # Redirect output to logs
+# exec > >(tee /var/log/user-data.log)
+# exec 2> >(tee /var/log/user-data.error.log >&2)
+
+# # Function for logging
+# log() {
+#     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
+# }
+
+# log "Starting user data script execution"
+
+
+# # This template should be saved as user_data.tpl
+
+# # Stop the ECS service that starts automatically
+# systemctl stop ecs
+
+# # Configure ECS agent
+# cat << 'EOF' > /etc/ecs/ecs.config
+# ECS_CLUSTER=${cluster_name}
+# ECS_LOGLEVEL=debug
+# ECS_AVAILABLE_LOGGING_DRIVERS=["json-file","awslogs"]
+# ECS_ENABLE_CONTAINER_METADATA=true
+# ECS_ENGINE_AUTH_TYPE=dockercfg
+# ECS_ENGINE_AUTH_DATA={"https://index.docker.io/v1/": {"auth": "$(echo -n "${dockerhub_username}:${dockerhub_password}" | base64)"}}
+# EOF
+
+# # Start the ECS service
+# systemctl start ecs
+
+
+# # Verify ECS agent
+# log "Verifying ECS agent status..."
+# for i in {1..5}; do
+#     if systemctl is-active ecs > /dev/null; then
+#         log "ECS agent is running"
+#         break
+#     fi
+#     if [ $i -eq 5 ]; then
+#         log "ERROR: ECS agent failed to start"
+#         systemctl status ecs
+#         exit 1
+#     fi
+#     log "Waiting for ECS agent... attempt $i/5"
+#     sleep 10
+# done
+
+# log "User data script completed successfully"

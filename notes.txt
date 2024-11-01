@@ -1388,3 +1388,110 @@ ami-06813d3793d203a47
 #         sleep 10
 #     done
 # }
+
+
+
+
+# # Stop the ECS service that starts automatically
+
+# #Stop the services
+# log "Stopping ECS service"
+
+# sudo systemctl stop docker || log "Failed to stop docker service"
+# sudo systemctl stop ecs || log "Failed to stop ECS service"
+
+# #Uninstall Docker
+# sudo yum remove docker docker-client docker-client-latest docker-common docker-latest docker-latest-logrotate docker-logrotate docker-engine -y || log "Failed to uninstall docker service"
+
+# #Uninstall the ECS agent
+# sudo yum remove ecs-init || log "Failed to uninstall ECS service"
+
+# sudo rm -f /etc/init/ecs.conf || log "Failed to remove service"
+
+
+#Install Docker
+# sudo amazon-linux-extras install docker -y || log "Failed to stop ECS service"
+# sudo systemctl start docker
+# sudo systemctl enable docker
+
+# #Install the ECS agent
+# sudo amazon-linux-extras install ecs -y
+
+# cat << 'EOF' > /etc/ecs/ecs.config
+# ECS_CLUSTER=${cluster_name}
+# ECS_LOGLEVEL=debug
+# ECS_AVAILABLE_LOGGING_DRIVERS=["json-file","awslogs"]
+# ECS_ENABLE_CONTAINER_METADATA=true
+# ECS_ENGINE_AUTH_TYPE=dockercfg
+# ECS_ENGINE_AUTH_DATA={"https://index.docker.io/v1/": {"auth": "$(echo -n "${dockerhub_username}:${dockerhub_password}" | base64)"}}
+# EOF
+
+# # start the ECS service
+# sudo systemctl start ecs
+
+# # enable the ECS service
+# sudo systemctl enable ecs
+
+
+# log "Stopping ECS service"
+# systemctl stop ecs.service || log "Failed to stop ECS service"
+
+# # Configure ECS agent
+# log "Configuring ECS agent"
+# cat << EOF > /etc/ecs/ecs.config
+# ECS_CLUSTER=demo-cluster-d5ba93f0
+# ECS_LOGLEVEL=debug
+# ECS_AVAILABLE_LOGGING_DRIVERS=["json-file","awslogs"]
+# ECS_ENABLE_CONTAINER_METADATA=true
+# EOF
+
+# # Check if the config file was created successfully
+# if [ ! -f /etc/ecs/ecs.config ]; then
+#     log "ERROR: Failed to create ECS config file"
+#     exit 1
+# fi
+
+# log "ECS config file created successfully"
+
+# # Start the ECS service
+# log "Starting ECS service"
+# systemctl start ecs.service || log "Failed to start ECS service"
+
+# # Verify ECS agent
+# log "Verifying ECS agent status..."
+# for i in {1..5}; do
+#     if systemctl is-active ecs.service > /dev/null; then
+#         log "ECS agent is running"
+#         break
+#     fi
+#     if [ $i -eq 5 ]; then
+#         log "ERROR: ECS agent failed to start"
+#         systemctl status ecs.service
+#         exit 1
+#     fi
+#     log "Waiting for ECS agent... attempt $i/5"
+#     sleep 10
+# done
+
+
+# # Configure ECS agent
+# cat << 'EOF' > /etc/ecs/ecs.config
+# ECS_CLUSTER=${cluster_name}
+# ECS_LOGLEVEL=debug
+# ECS_AVAILABLE_LOGGING_DRIVERS=["json-file","awslogs"]
+# ECS_ENABLE_CONTAINER_METADATA=true
+# ECS_ENGINE_AUTH_TYPE=dockercfg
+# ECS_ENGINE_AUTH_DATA={"https://index.docker.io/v1/": {"auth": "$(echo -n "${dockerhub_username}:${dockerhub_password}" | base64)"}}
+# EOF
+
+# # Redirect output to logs
+# exec > >(tee /var/log/user-data.log)
+# exec 2> >(tee /var/log/user-data.error.log >&2)
+
+# # Function for logging
+# log() {
+#     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
+# }
+
+# log "Starting user data script execution"
+# log "Testing log output"

@@ -12,7 +12,6 @@ output "cluster_capacity_providers" {
   value = aws_ecs_cluster_capacity_providers.main.capacity_providers
 }
 
-
 output "asg_arn" {
   description = "The ARN of the Auto Scaling Group"
   value       = var.asg_arn

@@ -37,6 +37,12 @@ resource "aws_lb" "main" {
   
   enable_deletion_protection = false
 
+  timeouts {
+    create = "30m"
+    update = "30m"
+    delete = "30m"
+  }
+  
   tags = {
     Name = var.alb_name
   }

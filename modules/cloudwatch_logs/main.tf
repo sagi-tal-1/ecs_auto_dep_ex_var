@@ -1,6 +1,7 @@
 resource "aws_cloudwatch_log_group" "this" {
   name              = var.name_prefix
   retention_in_days = var.retention_in_days
+  tags              = var.tags
 
   lifecycle {
     create_before_destroy = true

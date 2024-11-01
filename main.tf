@@ -21,76 +21,6 @@ provider "aws" {
   max_retries = 3
 }
 
-# Add this before all other resources
-resource "null_resource" "pre_destroy_cleanup" {
-  triggers = {
-    cluster_name = module.ecs_cluster.cluster_name
-    service_name = module.ecs_service.service_name
-    asg_name     = module.ecs_asg.asg_name
-  }
-
-  provisioner "local-exec" {
-    when    = destroy
-    command = <<-EOF
-      # Scale down ECS service
-      aws ecs update-service \
-        --cluster ${module.ecs_cluster.cluster_name} \
-        --service ${module.ecs_service.service_name} \
-        --desired-count 0 || true
-
-      # Wait for service to be empty
-      aws ecs wait services-inactive \
-        --cluster ${module.ecs_cluster.cluster_name} \
-        --services ${module.ecs_service.service_name} || true
-
-      # Detach instances from ASG
-      INSTANCE_IDS=$(aws autoscaling describe-auto-scaling-groups \
-        --auto-scaling-group-name ${module.ecs_asg.asg_name} \
-        --query 'AutoScalingGroups[0].Instances[*].InstanceId' \
-        --output text)
-
-      for ID in $INSTANCE_IDS; do
-        aws autoscaling detach-instances \
-          --instance-ids $ID \
-          --auto-scaling-group-name ${module.ecs_asg.asg_name} \
-          --should-decrement-desired-capacity || true
-      done
-    EOF
-  }
-}
-
-# Modify your module calls to include dependencies
-module "ecs_service" {
-  # ... existing configuration ...
-  depends_on = [
-    null_resource.pre_destroy_cleanup,
-    module.ecs_capacity_provider
-  ]
-}
-
-module "ecs_asg" {
-  # ... existing configuration ...
-  depends_on = [
-    null_resource.pre_destroy_cleanup,
-    module.ecs_service
-  ]
-}
-
-module "nat_gateway" {
-  # ... existing configuration ...
-  depends_on = [
-    module.ecs_asg,
-    module.vpc
-  ]
-}
-
-module "internet_gateway" {
-  # ... existing configuration ...
-  depends_on = [
-    module.nat_gateway,
-    module.vpc
-  ]
-}
 
 resource "random_id" "unique" {
   byte_length = 4
@@ -112,6 +42,18 @@ resource "local_file" "private_key" {
   file_permission = "0600"
 }
 
+resource "local_file" "user_data" {
+  content  = <<-EOF
+# Generated on: ${formatdate("YYYY-MM-DD hh:mm:ss ZZZ", timestamp())}
+# Cluster: ${module.ecs_cluster.cluster_name}
+# Region: ${var.aws_region}
+
+${module.ecs_launch_template.rendered_user_data}
+EOF
+
+  filename = "${path.root}/rendered_user_data.sh"
+  file_permission = "0644"
+}
 
 data "aws_availability_zones" "available" {
   state = "available"
@@ -280,6 +222,12 @@ module "log_group" {
   source            = "./modules/cloudwatch_logs"
   name_prefix       = "log_group-${random_id.unique.hex}"
   retention_in_days = var.cloudwatch_logs_retention_days
+
+tags = {
+    Environment = "production"
+    Application = "ecs-cluster"
+  }
+
 }
 
 # ECS Cluster and related resources ----------------------- 
@@ -303,7 +251,7 @@ data "aws_ami" "ecs_optimized" {
   
   filter {
     name   = "name"
-     values = ["al2023-ami-ecs-hvm-*-x86_64"]
+     values = ["amzn2-ami-ecs-hvm-*-x86_64-ebs"] #amzn2-ami-ecs-hvm-*-x86_64-ebs Without the use of SSM agent] --- al2023-ami-ecs-hvm-*-x86_64 with ssm agent
   }
 
   filter {
@@ -341,15 +289,20 @@ module "ecs_launch_template" {
   log_group_name           = module.log_group.cloudwatch_log_group_name
   dockerhub_username       = local.dockerhub_credentials.username
   dockerhub_password       = local.dockerhub_credentials.password
- public_subnet_ids = module.vpc.public_subnet_ids 
- log_file                 = "/var/log/ecs/user_data.log"  # <-- Add this line
- error_log                = "/var/log/ecs_error.log"
+  public_subnet_ids = module.vpc.public_subnet_ids 
+  log_file                 = "/var/log/ecs/user_data.log"  # <-- Add this line
+  error_log                = "/var/log/ecs_error.log"
 
  
   
-
+ tags = {
+    Environment = "production"
+    Terraform   = "true"
+    ECSCluster  = module.ecs_cluster.cluster_name
+  }
 
 }
+
 resource "local_file" "rendered_user_data" {
   content  = module.ecs_launch_template.rendered_user_data
   filename = "${path.module}/rendered_user_data.sh"
@@ -437,10 +390,6 @@ module "ecs_task_definition" {
   cloudwatch_log_group_name = module.log_group.cloudwatch_log_group_name
   cloudwatch_log_group_arn  = module.log_group.cloudwatch_log_group_arn
 
-  # # Remove these lines as they're not needed for a simple Nginx container
-  # node_port          = 3000
-  # availability_zones = module.vpc.availability_zones
-  # example_env_value  = "example_value"
 
   depends_on = [module.log_group]
 }
@@ -450,26 +399,6 @@ resource "null_resource" "docker_login" {
   }
 }
 
-# module "ecs_task_definition" {
-#   source                = "./modules/ecs_task_definition"
-#   family                = "nginx-task-${random_id.unique.hex}"
-#   container_name        = "nginx"
-#   log_group_name        = module.log_group.cloudwatch_log_group_name
-#   log_stream_prefix     = "ecs"
-#   cpu                   = 256
-#   memory                = 256
-#   nginx_port            = 80
-#   node_port             = 3000
-#   example_env_value     = "example_value"
-#   task_role_arn      = module.ecs_task_role.task_role_arn
-#   execution_role_arn = module.ecs_task_role.execution_role_arn
-#   log_region = var.aws_region  # or the specific region you want to use for logs
-#   availability_zones  = module.vpc.availability_zones 
-#   cloudwatch_log_group_arn = module.log_group.cloudwatch_log_group_arn
-#   cloudwatch_log_group_name = module.log_group.cloudwatch_log_group_name
-
-#   depends_on = [module.log_group, ]
-# }
 
 # 15. ECS Service Module -----------------------
 module "ecs_service" {
@@ -479,7 +408,7 @@ module "ecs_service" {
   cluster_id                = module.ecs_cluster.cluster_id
   ecs_cluster_id            = module.ecs_cluster.ecs_cluster_id
   task_definition_arn       = module.ecs_task_definition.task_definition_arn
-  desired_count             = 2
+  desired_count             = 1
   subnet_ids                = module.vpc.public_subnet_ids
   target_group_arn          = module.alb.target_group_arn
   container_name            = module.ecs_task_definition.container_name
@@ -509,7 +438,7 @@ module "ecs_service_auto_scaling" {
 
   cluster_name        = module.ecs_cluster.cluster_name
   service_name        = module.ecs_service.service_name
-  min_capacity        = 2
+  min_capacity        = 1
   max_capacity        = 5
   target_cpu_value    = 80
   target_memory_value = 80
@@ -523,215 +452,21 @@ locals {
   is_destroy = terraform.workspace == "default" && length(terraform.workspace) == 0
 }
 
-module "cleanup" {
-  source                = "./modules/cleanup"
-  aws_region            = var.aws_region
-  task_definition_arn   = module.ecs_task_definition.task_definition_arn
-  cluster_arn           = module.ecs_cluster.cluster_id
-  cleanup_enabled       = local.is_destroy
-  vpc_id               = module.vpc.vpc_id
+module "destroy" {
+  source = "./modules/destroy"
+  
+  cluster_name = module.ecs_cluster.cluster_name
+  service_name = module.ecs_service.service_name
+  asg_name     = module.ecs_asg.asg_name
+  task_family  = module.ecs_task_definition.family
 
-  depends_on = [module.ecs_task_definition]
+  depends_on = [
+    module.ecs_service_auto_scaling,
+    module.ecs_service,
+    module.ecs_capacity_provider,
+    module.ecs_asg,
+    module.alb,
+    module.nat_gateway,
+    module.route_table
+  ]
 }
-
-
-
-
-
-
-# #v3
-# # Cleanup Logic -----------------------
-# # Replace the existing cleanup resource at the bottom of the file
-# resource "null_resource" "cleanup" {
-#   provisioner "local-exec" {
-#     when = destroy
-#     command = <<EOT
-#       #!/bin/bash
-      
-#       # Scale down ECS service
-#       echo "Scaling down ECS service..."
-#       aws ecs update-service \
-#         --cluster ${module.ecs_cluster.cluster_name} \
-#         --service ${module.ecs_service.service_name} \
-#         --desired-count 0 || true  # Ensures service is scaled to zero
-      
-#       # Wait for tasks to drain
-#       echo "Waiting for tasks to drain..."
-#       sleep 30  # Allows tasks time to shut down gracefully
-      
-#       # Force delete the service
-#       echo "Deleting ECS service..."
-#       aws ecs delete-service \
-#         --cluster ${module.ecs_cluster.cluster_name} \
-#         --service ${module.ecs_service.service_name} \
-#         --force || true  # Removes service, even if tasks are still in transition
-      
-#       # Scale down ASG
-#       echo "Scaling down ASG..."
-#       aws autoscaling update-auto-scaling-group \
-#         --auto-scaling-group-name ${module.ecs_asg.autoscaling_group_name} \
-#         --min-size 0 \
-#         --max-size 0 \
-#         --desired-capacity 0 || true  # Configures ASG to not run instances
-      
-#       # Wait for instances to terminate
-#       echo "Waiting for instances to terminate..."
-#       sleep 60  # Provides extra time for ASG instances to shut down
-
-#       # Delete the cluster
-#       echo "Deleting ECS cluster..."
-#       aws ecs delete-cluster --cluster ${module.ecs_cluster.cluster_name} || true  # Deletes ECS cluster
-      
-#       # Delete the log group
-#       echo "Deleting CloudWatch log group..."
-#       aws logs delete-log-group \
-#         --log-group-name ${module.log_group.cloudwatch_log_group_name} || true  # Cleans up log group
-#     EOT
-
-#     environment = {
-#       AWS_DEFAULT_REGION = var.aws_region  # Ensures AWS CLI uses the correct region
-#     }
-#   }
-
-#   depends_on = [
-#     module.ecs_service,            # Ensures service deletion happens after ECS resources
-#     module.ecs_capacity_provider,  # Ensures cleanup aligns with capacity provider
-#     module.ecs_cluster,            # Ensures cluster deletion occurs after dependencies
-#     module.ecs_asg,                # Ensures ASG teardown aligns with cleanup
-#     null_resource.network_cleanup  # Ensure network cleanup completes first
-#   ]
-# }
-
-
-
-
-
-# #V2 cleanup
-# # Cleanup Logic -----------------------
-# # Replace the existing cleanup resource at the bottom of the file
-# resource "null_resource" "cleanup" {
-#   provisioner "local-exec" {
-#     when = destroy
-#     command = <<EOT
-#       #!/bin/bash
-      
-#       # Scale down ECS service
-#       echo "Scaling down ECS service..."
-#       aws ecs update-service \
-#         --cluster ${module.ecs_cluster.cluster_name} \
-#         --service ${module.ecs_service.service_name} \
-#         --desired-count 0 || true
-      
-#       # Wait for tasks to drain
-#       echo "Waiting for tasks to drain..."
-#       sleep 30
-      
-#       # Force delete the service
-#       echo "Deleting ECS service..."
-#       aws ecs delete-service \
-#         --cluster ${module.ecs_cluster.cluster_name} \
-#         --service ${module.ecs_service.service_name} \
-#         --force || true
-      
-#       # Scale down ASG
-#       echo "Scaling down ASG..."
-#       aws autoscaling update-auto-scaling-group \
-#         --auto-scaling-group-name ${module.ecs_asg.autoscaling_group_name} \
-#         --min-size 0 \
-#         --max-size 0 \
-#         --desired-capacity 0 || true
-      
-#       # Wait for instances to terminate
-#       echo "Waiting for instances to terminate..."
-#       sleep 60
-      
-#       # Delete the cluster
-#       echo "Deleting ECS cluster..."
-#       aws ecs delete-cluster --cluster ${module.ecs_cluster.cluster_name} || true
-      
-#       # Delete the log group
-#       echo "Deleting CloudWatch log group..."
-#       aws logs delete-log-group \
-#         --log-group-name ${module.log_group.cloudwatch_log_group_name} || true
-#     EOT
-
-#     environment = {
-#       AWS_DEFAULT_REGION = var.aws_region
-#     }
-#   }
-
-#   depends_on = [
-#     module.ecs_service,
-#     module.ecs_capacity_provider,
-#     module.ecs_cluster,
-#     module.ecs_asg,
-#     null_resource.network_cleanup  # Add dependency on network cleanup
-#   ]
-# }
-
-
-
-
-
-
-
-
-
-# V1 clean up 
-# resource "null_resource" "ecs_cleanup" {
-#   triggers = {
-#     cluster_name = module.ecs_cluster.cluster_name
-#     region       = var.aws_region
-
-#   }
-
-#   provisioner "local-exec" {
-#     when    = destroy
-#     command = <<EOF
-# #!/bin/bash
-# set -e
-
-# CLUSTER_NAME=${self.triggers.cluster_name}
-# REGION=${self.triggers.region}
-
-# echo "Cleaning up ECS cluster: $CLUSTER_NAME"
-
-# # Update all services to have 0 desired count
-# for service in $(aws ecs list-services --cluster $CLUSTER_NAME --region $REGION --output text --query 'serviceArns[]'); do
-#   aws ecs update-service --cluster $CLUSTER_NAME --service $(basename $service) --desired-count 0 --region $REGION
-# done
-
-# # Wait for all tasks to stop
-# aws ecs wait services-inactive --cluster $CLUSTER_NAME --services $(aws ecs list-services --cluster $CLUSTER_NAME --region $REGION --output text --query 'serviceArns[]') --region $REGION
-
-# # Delete all services
-# for service in $(aws ecs list-services --cluster $CLUSTER_NAME --region $REGION --output text --query 'serviceArns[]'); do
-#   aws ecs delete-service --cluster $CLUSTER_NAME --service $(basename $service) --force --region $REGION
-# done
-
-# # Deregister all task definitions
-# for task_def in $(aws ecs list-task-definitions --family-prefix $CLUSTER_NAME --region $REGION --output text --query 'taskDefinitionArns[]'); do
-#   aws ecs deregister-task-definition --task-definition $task_def --region $REGION
-# done
-
-# # Deregister all container instances
-# for instance in $(aws ecs list-container-instances --cluster $CLUSTER_NAME --region $REGION --output text --query 'containerInstanceArns[]'); do
-#   aws ecs deregister-container-instance --cluster $CLUSTER_NAME --container-instance $(basename $instance) --force --region $REGION
-# done
-
-# # Remove all capacity providers
-# aws ecs put-cluster-capacity-providers --cluster $CLUSTER_NAME --capacity-providers [] --default-capacity-provider-strategy [] --region $REGION
-
-# echo "ECS cleanup completed"
-# EOF
-#   }
-
-#   depends_on = [module.ecs_service, module.ecs_capacity_provider, module.ecs_cluster]
-
-# }
-
-
-
-
-
-

@@ -1,40 +1,43 @@
+#moduls/ecs_service/main.tf
 resource "aws_ecs_service" "app" {
-  name            = var.service_name
-  cluster         = var.cluster_id
-  task_definition = var.task_definition_arn
-  desired_count   = var.desired_count
-  depends_on      = [var.alb_listener_arn]
+  name                               = var.service_name
+  cluster                           = var.cluster_id
+  task_definition                   = var.task_definition_arn
+  desired_count                     = var.desired_count
+  health_check_grace_period_seconds = 120
+  force_new_deployment              = true
 
+  depends_on = [var.alb_listener_arn]
+
+  # Capacity provider strategy
   dynamic "capacity_provider_strategy" {
     for_each = var.capacity_provider_name != "" ? [1] : []
     content {
       capacity_provider = var.capacity_provider_name
-      weight            = 100
-      base              = 1
+      weight           = 100
+      base            = 1
     }
   }
 
-  # ordered_placement_strategy {
-  #   type  = "spread"
-  #   field = "attribute:ecs.availability-zone"
-  # }
-
-  # ordered_placement_strategy {
-  #   type  = "binpack"
-  #   field = "memory"
-  # }
+  # Placement strategies
+  ordered_placement_strategy {
+    type  = "spread"
+    field = "attribute:ecs.availability-zone"
+  }
 
   ordered_placement_strategy {
     type  = "spread"
     field = "instanceId"
   }
-   
+
+  # Load balancer configuration
   load_balancer {
     target_group_arn = var.target_group_arn
     container_name   = "${var.container_name}-nginx"
     container_port   = var.nginx_port
   }
- 
+
+  # Deployment settings
   deployment_circuit_breaker {
     enable   = true
     rollback = true
@@ -44,24 +47,34 @@ resource "aws_ecs_service" "app" {
     type = "ECS"
   }
 
- placement_constraints {
+  # Placement constraints
+  placement_constraints {
     type = "distinctInstance"
   }
-  health_check_grace_period_seconds = 60
-  lifecycle {
-    create_before_destroy = true
-    
-    # Add this to prevent destroy if tasks are running
-    prevent_destroy = false
+
+  # Timeouts
+  timeouts {
+    create = "30m"
+    update = "30m"
+    delete = "30m"
   }
 
-  provisioner "local-exec" {
-    when    = destroy
-    command = "aws ecs update-service --cluster ${var.cluster_name} --service ${self.name} --desired-count 0 || true"
+  lifecycle {
+    create_before_destroy = true
+    prevent_destroy      = false
+    ignore_changes      = [desired_count]
   }
- 
- 
-  # no network conf as task defenition uses bridg network
+}
+
+# Security group rule for ECS tasks
+resource "aws_security_group_rule" "allow_alb_to_ecs" {
+  type                     = "ingress"
+  from_port                = var.nginx_port
+  to_port                  = var.nginx_port
+  protocol                 = "tcp"
+  source_security_group_id = var.security_group_id
+  security_group_id        = var.security_group_id
+  description             = "Allow ALB to ECS tasks"
 }
 
 
@@ -77,12 +90,13 @@ resource "aws_ecs_service" "app" {
 #   depends_on      = [var.alb_listener_arn]
 
 
+
 #   dynamic "capacity_provider_strategy" {
 #     for_each = var.capacity_provider_name != "" ? [1] : []
 #     content {
 #       capacity_provider = var.capacity_provider_name
-#       weight            = 100
-#       base              = 1
+#       weight           = 100
+#       base             = 1
 #     }
 #   }
 
@@ -90,17 +104,12 @@ resource "aws_ecs_service" "app" {
 #     type  = "spread"
 #     field = "instanceId"
 #   }
-# network_configuration {
-#     security_groups = [var.security_group_id]
-#     subnets         = var.subnet_ids
-#   }
-  
+   
 #   load_balancer {
 #     target_group_arn = var.target_group_arn
 #     container_name   = "${var.container_name}-nginx"
 #     container_port   = var.nginx_port
 #   }
- 
  
 #   deployment_circuit_breaker {
 #     enable   = true
@@ -111,15 +120,21 @@ resource "aws_ecs_service" "app" {
 #     type = "ECS"
 #   }
 
-#   lifecycle {
-#     ignore_changes = [desired_count]
-#   }
-
-
-
-#   # Add this to ensure proper task placement
 #   placement_constraints {
 #     type = "distinctInstance"
 #   }
+
+#  timeouts {
+#     create = "30m"
+#     update = "30m"
+#     delete = "30m"
+#   }
+
+#   lifecycle {
+#     create_before_destroy = true
+#     prevent_destroy = false
+#   }
+
+#  health_check_grace_period_seconds = 60
 
 # }

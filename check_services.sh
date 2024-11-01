@@ -6,25 +6,130 @@ GREEN='\033[0;32m'
 YELLOW='\033[0;33m'
 NC='\033[0m' # No Color
 
-# Arrays to store found resources
-declare -A found_resources
-
 # Function to check if a resource exists
 check_resource() {
     local resource_type=$1
     local command=$2
     
     echo -n "Checking for ${resource_type}... "
-    # shellcheck disable=SC2155
     local resources=$(eval "$command")
     
     if [ -z "$resources" ]; then
         echo -e "${GREEN}None found${NC}"
+        return 1
     else
         echo -e "${RED}Resources found:${NC}"
-        # shellcheck disable=SC2001
         echo "$resources" | sed 's/^/  /'
-        found_resources[$resource_type]=$resources
+        declare -g "${resource_type//-/_}=$resources"
+        return 0
+    fi
+}
+
+# Function to delete ECS Services
+delete_ecs_services() {
+    local cluster_name=$(echo $1 | cut -d'/' -f2)
+    local service_name=$(echo $1 | cut -d'/' -f3)
+    echo "Deleting ECS service: $service_name from cluster: $cluster_name"
+    aws ecs update-service --cluster $cluster_name --service $service_name --desired-count 0
+    sleep 30  # Wait for tasks to drain
+    aws ecs delete-service --cluster $cluster_name --service $service_name --force
+}
+
+# Function to delete resources in order
+delete_all_resources() {
+    # 1. Scale down and delete ECS Services
+    if [ ! -z "$ECS_Services" ]; then
+        for service in $ECS_Services; do
+            delete_ecs_services "$service"
+        done
+    fi
+    sleep 30
+
+    # 2. Delete Auto Scaling Groups
+    if [ ! -z "$Auto_Scaling_Groups" ]; then
+        for asg in $Auto_Scaling_Groups; do
+            echo "Deleting Auto Scaling Group: $asg"
+            aws autoscaling update-auto-scaling-group --auto-scaling-group-name $asg --min-size 0 --max-size 0 --desired-capacity 0
+            sleep 30
+            aws autoscaling delete-auto-scaling-group --auto-scaling-group-name $asg --force-delete
+        done
+    fi
+    sleep 30
+
+    # 3. Delete Load Balancers
+    if [ ! -z "$Load_Balancers" ]; then
+        for lb in $Load_Balancers; do
+            echo "Deleting Load Balancer: $lb"
+            aws elbv2 delete-load-balancer --load-balancer-arn $lb
+        done
+    fi
+    sleep 30
+
+    # 4. Delete Target Groups
+    if [ ! -z "$Target_Groups" ]; then
+        for tg in $Target_Groups; do
+            echo "Deleting Target Group: $tg"
+            aws elbv2 delete-target-group --target-group-arn $tg
+        done
+    fi
+
+    # 5. Delete NAT Gateways
+    if [ ! -z "$NAT_Gateways" ]; then
+        for nat in $NAT_Gateways; do
+            echo "Deleting NAT Gateway: $nat"
+            aws ec2 delete-nat-gateway --nat-gateway-id $nat
+        done
+    fi
+    sleep 30
+
+    # 6. Release Elastic IPs
+    if [ ! -z "$Elastic_IPs" ]; then
+        for eip in $Elastic_IPs; do
+            echo "Releasing Elastic IP: $eip"
+            aws ec2 release-address --allocation-id $eip
+        done
+    fi
+
+    # 7. Detach and Delete Internet Gateway
+    if [ ! -z "$Internet_Gateways" ]; then
+        for igw in $Internet_Gateways; do
+            echo "Detaching and Deleting Internet Gateway: $igw"
+            VPC_ID=$(aws ec2 describe-internet-gateways --internet-gateway-ids $igw --query 'InternetGateways[0].Attachments[0].VpcId' --output text)
+            aws ec2 detach-internet-gateway --internet-gateway-id $igw --vpc-id $VPC_ID
+            aws ec2 delete-internet-gateway --internet-gateway-id $igw
+        done
+    fi
+
+    # 8. Delete Launch Templates
+    if [ ! -z "$Launch_Templates" ]; then
+        for lt in $Launch_Templates; do
+            echo "Deleting Launch Template: $lt"
+            aws ec2 delete-launch-template --launch-template-id $lt
+        done
+    fi
+
+    # 9. Delete CloudWatch Log Groups
+    if [ ! -z "$CloudWatch_Log_Groups" ]; then
+        for log_group in $CloudWatch_Log_Groups; do
+            echo "Deleting Log Group: $log_group"
+            aws logs delete-log-group --log-group-name "$log_group"
+        done
+    fi
+
+    # 10. Delete ECS Cluster
+    if [ ! -z "$ECS_Clusters" ]; then
+        for cluster in $ECS_Clusters; do
+            echo "Deleting ECS Cluster: $cluster"
+            aws ecs delete-cluster --cluster $cluster
+        done
+    fi
+
+    # 11. Delete VPC (this will also delete associated subnets and security groups)
+    if [ ! -z "$VPCs" ]; then
+        for vpc in $VPCs; do
+            echo "Deleting VPC: $vpc"
+            aws ec2 delete-vpc --vpc-id $vpc
+        done
     fi
 }
 
@@ -32,85 +137,40 @@ check_resource() {
 echo "Checking for remaining AWS resources..."
 echo "======================================="
 
-check_resource "EC2 Instances" "aws ec2 describe-instances --filters Name=instance-state-name,Values=running,stopped,stopping --query 'Reservations[*].Instances[*].[InstanceId]' --output text"
-
-check_resource "EBS Volumes" "aws ec2 describe-volumes --filters Name=status,Values=available,in-use --query 'Volumes[*].[VolumeId]' --output text"
-
-check_resource "Elastic IP Addresses" "aws ec2 describe-addresses --query 'Addresses[*].[AllocationId]' --output text"
-
-check_resource "Load Balancers" "aws elbv2 describe-load-balancers --query 'LoadBalancers[*].[LoadBalancerArn]' --output text"
-
-check_resource "Auto Scaling Groups" "aws autoscaling describe-auto-scaling-groups --query 'AutoScalingGroups[*].[AutoScalingGroupName]' --output text"
-
-check_resource "ECS Clusters" "aws ecs list-clusters --query 'clusterArns[]' --output text"
-
-check_resource "ECS Services" "aws ecs list-clusters --query 'clusterArns[]' --output text | xargs -I {} aws ecs list-services --cluster {} --query 'serviceArns[]' --output text"
-
-check_resource "RDS Instances" "aws rds describe-db-instances --query 'DBInstances[*].[DBInstanceIdentifier]' --output text"
-
-check_resource "Lambda Functions" "aws lambda list-functions --query 'Functions[*].[FunctionName]' --output text"
-
+check_resource "ECS_Clusters" "aws ecs list-clusters --query 'clusterArns[]' --output text"
+check_resource "ECS_Services" "aws ecs list-clusters --query 'clusterArns[]' --output text | xargs -I {} aws ecs list-services --cluster {} --query 'serviceArns[]' --output text"
+check_resource "Auto_Scaling_Groups" "aws autoscaling describe-auto-scaling-groups --query 'AutoScalingGroups[*].[AutoScalingGroupName]' --output text"
+check_resource "Launch_Templates" "aws ec2 describe-launch-templates --query 'LaunchTemplates[*].[LaunchTemplateId]' --output text"
+check_resource "Load_Balancers" "aws elbv2 describe-load-balancers --query 'LoadBalancers[*].[LoadBalancerArn]' --output text"
+check_resource "Target_Groups" "aws elbv2 describe-target-groups --query 'TargetGroups[*].[TargetGroupArn]' --output text"
+check_resource "NAT_Gateways" "aws ec2 describe-nat-gateways --filter Name=state,Values=available --query 'NatGateways[*].[NatGatewayId]' --output text"
+check_resource "Elastic_IPs" "aws ec2 describe-addresses --query 'Addresses[*].[AllocationId]' --output text"
+check_resource "Internet_Gateways" "aws ec2 describe-internet-gateways --query 'InternetGateways[*].[InternetGatewayId]' --output text"
 check_resource "VPCs" "aws ec2 describe-vpcs --filters Name=isDefault,Values=false --query 'Vpcs[*].[VpcId]' --output text"
-
-check_resource "Subnets" "aws ec2 describe-subnets --filters Name=default-for-az,Values=false --query 'Subnets[*].[SubnetId]' --output text"
-
-check_resource "Internet Gateways" "aws ec2 describe-internet-gateways --query 'InternetGateways[*].[InternetGatewayId]' --output text"
-
-check_resource "NAT Gateways" "aws ec2 describe-nat-gateways --filter Name=state,Values=available,pending --query 'NatGateways[*].[NatGatewayId]' --output text"
-
-check_resource "Route Tables" "aws ec2 describe-route-tables --filters Name=association.main,Values=false --query 'RouteTables[*].[RouteTableId]' --output text"
-
-check_resource "Security Groups" "aws ec2 describe-security-groups --filters Name=group-name,Values=!'default' --query 'SecurityGroups[*].[GroupId]' --output text"
-
-check_resource "Network ACLs" "aws ec2 describe-network-acls --filters Name=default,Values=false --query 'NetworkAcls[*].[NetworkAclId]' --output text"
-
-check_resource "VPC Peering Connections" "aws ec2 describe-vpc-peering-connections --query 'VpcPeeringConnections[*].[VpcPeeringConnectionId]' --output text"
-
-check_resource "VPN Connections" "aws ec2 describe-vpn-connections --query 'VpnConnections[*].[VpnConnectionId]' --output text"
-
-check_resource "VPN Gateways" "aws ec2 describe-vpn-gateways --query 'VpnGateways[*].[VpnGatewayId]' --output text"
-
-check_resource "CloudWatch Log Groups" "aws logs describe-log-groups --query 'logGroups[*].[logGroupName]' --output text"
+check_resource "CloudWatch_Log_Groups" "aws logs describe-log-groups --query 'logGroups[*].[logGroupName]' --output text"
 
 echo "======================================="
 echo "Resource check completed."
 
 # Menu for user action
-if [ ${#found_resources[@]} -gt 0 ]; then
-    echo -e "\n${YELLOW}Remaining resources found. Choose an action:${NC}"
-    echo "1. Delete resources individually"
-    echo "2. Skip deletion"
-    echo "3. Delete all remaining resources"
-    # shellcheck disable=SC2162
-    read -p "Enter your choice (1-3): " choice
+echo -e "\n${YELLOW}Choose an action:${NC}"
+echo "1. Delete resources individually"
+echo "2. Skip deletion"
+echo "3. Delete all remaining resources"
+read -p "Enter your choice (1-3): " choice
 
-    case $choice in
-        1)
-            for resource_type in "${!found_resources[@]}"; do
-                echo -e "\n${YELLOW}${resource_type}:${NC}"
-                echo "${found_resources[$resource_type]}"
-                # shellcheck disable=SC2162
-                read -p "Delete these resources? (y/n): " delete_choice
-                if [[ $delete_choice == "y" ]]; then
-                    echo "Deleting ${resource_type}..."
-                    # Add deletion logic here based on resource type
-                fi
-            done
-            ;;
-        2)
-            echo "Skipping deletion. Resources left intact."
-            ;;
-        3)
-            echo "Deleting all remaining resources..."
-            for resource_type in "${!found_resources[@]}"; do
-                echo "Deleting ${resource_type}..."
-                # Add deletion logic here based on resource type
-            done
-            ;;
-        *)
-            echo "Invalid choice. Exiting without changes."
-            ;;
-    esac
-else
-    echo -e "\n${GREEN}All resources have been successfully deleted.${NC}"
-fi
+case $choice in
+    1)
+        echo "Individual deletion not implemented yet"
+        ;;
+    2)
+        echo "Skipping deletion. Resources left intact."
+        ;;
+    3)
+        echo "Deleting all resources..."
+        delete_all_resources
+        ;;
+    *)
+        echo "Invalid choice. Exiting without changes."
+        ;;
+esac

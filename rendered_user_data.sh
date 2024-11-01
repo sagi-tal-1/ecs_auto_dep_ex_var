@@ -52,14 +52,14 @@ fi
 #Create ECS config file
 log "Creating ECS config"
 sudo bash -c 'cat << EOF > /etc/ecs/ecs.config
-ECS_CLUSTER=${cluster_name}
+ECS_CLUSTER=demo-cluster-d4db82ea
 ECS_LOGLEVEL=debug
 ECS_AVAILABLE_LOGGING_DRIVERS=["json-file","awslogs"]
 ECS_ENABLE_CONTAINER_METADATA=true
 ECS_ENGINE_TASK_CLEANUP_WAIT_DURATION=1h
 ECS_IMAGE_CLEANUP_INTERVAL=10m
 ECS_ENGINE_AUTH_TYPE=docker
-ECS_ENGINE_AUTH_DATA={"https://index.docker.io/v1/": {"username": "${dockerhub_username}", "password": "${dockerhub_password}"}}
+ECS_ENGINE_AUTH_DATA={"https://index.docker.io/v1/": {"username": "sergyfxb@gmail.com", "password": "Wgi29022025!@#"}}
 ECS_DATADIR=/data
 ECS_ENABLE_SPOT_INSTANCE_DRAINING=true
 ECS_CONTAINER_STOP_TIMEOUT=30s

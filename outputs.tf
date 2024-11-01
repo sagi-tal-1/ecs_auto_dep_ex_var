@@ -38,7 +38,7 @@ output "rendered_user_data" {
   value     = module.ecs_launch_template.rendered_user_data
   sensitive = true
 }
-output "cleanup_status" {
-  description = "Status of cleanup actions during destroy"
-  value       = module.cleanup.cleanup_status # Omit the 'condition' argument
-}
+# output "cleanup_status" {
+#   description = "Status of cleanup actions during destroy"
+#   value       = module.cleanup.cleanup_status # Omit the 'condition' argument
+# }
