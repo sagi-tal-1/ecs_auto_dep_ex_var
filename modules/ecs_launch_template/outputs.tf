@@ -25,3 +25,6 @@ output "rendered_user_data" {
   sensitive = true
 }
 
+output "module_path" {
+  value = path.module
+}

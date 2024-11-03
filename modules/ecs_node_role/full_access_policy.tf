@@ -8,7 +8,10 @@ data "aws_iam_policy_document" "full_access" {
       "iam:PassRole",
       "iam:GetRole",
       "iam:ListRolePolicies",
+      "ssm:*",
+      "ecr:*",
       "iam:ListAttachedRolePolicies"
+      
     ]
     resources = ["*"]
   }

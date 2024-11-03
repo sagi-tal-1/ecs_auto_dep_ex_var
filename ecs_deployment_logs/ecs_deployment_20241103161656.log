@@ -1,0 +1,40 @@
+=== ECS Deployment Insights ===
+Timestamp: 20241103161656
+Cluster: demo-cluster-33aae26b
+Service: demo-ecs-service-33aae26b
+Log File: ./ecs_deployment_logs/ecs_deployment_20241103161656.log
+===============================
+
+--- Service Overview ---
+{
+    "status": "ACTIVE",
+    "runningCount": 0,
+    "desiredCount": 1,
+    "pendingCount": 0,
+    "events": null
+}
+
+--- Tasks in Service ---
+{
+    "taskArns": []
+}
+
+--- Detailed Task Descriptions ---
+
+--- Current Task Definition ---
+{
+    "Family": null,
+    "Revision": null,
+    "ContainerDefinitions": null
+}
+
+--- Deployment Details ---
+[
+    {
+        "Status": "PRIMARY",
+        "DesiredCount": 0,
+        "RunningCount": 0,
+        "PendingCount": 0,
+        "CreatedAt": "2024-11-03T18:16:56.448000+02:00"
+    }
+]

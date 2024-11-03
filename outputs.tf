@@ -42,3 +42,19 @@ output "rendered_user_data" {
 #   description = "Status of cleanup actions during destroy"
 #   value       = module.cleanup.cleanup_status # Omit the 'condition' argument
 # }
+output "application_url" {
+  description = "URL of the application"
+  value       = "http://${module.alb.alb_dns_name}"
+}
+
+# output "container_instances" {
+#   description = "Information about the running containers"
+#   value = {
+#     service_name = module.ecs_service.service_name
+#     task_ips     = module.ecs_service.task_ips
+#     access_url   = module.ecs_service.service_url
+#   }
+# }
+output "module_path" {
+  value = path.module
+}

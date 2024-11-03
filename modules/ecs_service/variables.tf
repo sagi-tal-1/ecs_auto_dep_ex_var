@@ -97,3 +97,8 @@ variable "alb_listener_arn" {
   description = "ARN of the ALB listener"
   type        = string
 }
+# Add to your variables.tf
+variable "alb_dns_name" {
+  description = "DNS name of the ALB"
+  type        = string
+}

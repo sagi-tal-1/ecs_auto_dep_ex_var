@@ -1,4 +1,5 @@
-#moduls/ecs_service/main.tf
+# modules/ecs_service/main.tf
+
 resource "aws_ecs_service" "app" {
   name                               = var.service_name
   cluster                           = var.cluster_id

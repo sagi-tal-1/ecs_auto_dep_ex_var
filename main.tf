@@ -301,6 +301,8 @@ module "ecs_launch_template" {
     ECSCluster  = module.ecs_cluster.cluster_name
   }
 
+ depends_on = [module.ecs_cluster] 
+ 
 }
 
 resource "local_file" "rendered_user_data" {
@@ -420,6 +422,7 @@ module "ecs_service" {
   log_group_arn             = module.log_group.cloudwatch_log_group_arn
   cloudwatch_log_group_name = module.log_group.cloudwatch_log_group_name
   alb_listener_arn          = module.alb.listener_arn
+  alb_dns_name = module.alb.alb_dns_name
 
 
   depends_on = [
@@ -429,6 +432,125 @@ module "ecs_service" {
     module.ecs_asg
   ]
 }
+
+# Add a null_resource to wait for tasks to be running and output their info
+
+
+resource "null_resource" "check_task_status" {
+  depends_on = [module.ecs_service]
+  
+  triggers = {
+    service_id = module.ecs_service.service_id
+  }
+  
+  provisioner "local-exec" {
+    environment = {
+      CLUSTER_NAME     = module.ecs_cluster.cluster_name
+      SERVICE_NAME     = module.ecs_service.service_name
+      TIMESTAMP        = formatdate("YYYYMMDDhhmmss", timestamp())
+      LOG_FILE_PATH    = "${path.module}/ecs_deployment_logs/ecs_deployment_${formatdate("YYYYMMDDhhmmss", timestamp())}.log"
+    }
+
+    interpreter = ["/bin/bash", "-c"]
+    command     = <<EOF
+# Create logs directory if it doesn't exist
+mkdir -p "${path.module}/ecs_deployment_logs"
+
+# Redirect all output to the log file
+{
+echo "=== ECS Deployment Insights ==="
+echo "Timestamp: $TIMESTAMP"
+echo "Cluster: $CLUSTER_NAME"
+echo "Service: $SERVICE_NAME"
+echo "Log File: $LOG_FILE_PATH"
+echo "==============================="
+
+# 1. Basic Service Status
+echo -e "\n--- Service Overview ---"
+aws ecs describe-services \
+  --cluster "$CLUSTER_NAME" \
+  --services "$SERVICE_NAME" \
+  --query 'services[0].{status:status, runningCount:runningCount, desiredCount:desiredCount, pendingCount:pendingCount, events:events[0].message}' \
+  --output json
+
+# 2. List Tasks in the Service
+echo -e "\n--- Tasks in Service ---"
+aws ecs list-tasks \
+  --cluster "$CLUSTER_NAME" \
+  --service-name "$SERVICE_NAME" \
+  --output json
+
+# 3. Detailed Task Information
+echo -e "\n--- Detailed Task Descriptions ---"
+TASKS=$(aws ecs list-tasks \
+  --cluster "$CLUSTER_NAME" \
+  --service-name "$SERVICE_NAME" \
+  --query 'taskArns' \
+  --output text)
+
+if [ -n "$TASKS" ]; then
+  aws ecs describe-tasks \
+    --cluster "$CLUSTER_NAME" \
+    --tasks $TASKS \
+    --query 'tasks[].{
+      TaskArn: taskArn, 
+      LastStatus: lastStatus, 
+      DesiredStatus: desiredStatus, 
+      Health: healthStatus,
+      StartedAt: startedAt,
+      Containers: containers[].{
+        Name: name, 
+        Image: image, 
+        LastStatus: lastStatus, 
+        HealthStatus: healthStatus
+      }
+    }' \
+    --output json
+fi
+
+# 4. Task Definition Details
+echo -e "\n--- Current Task Definition ---"
+TASK_DEF=$(aws ecs describe-services \
+  --cluster "$CLUSTER_NAME" \
+  --services "$SERVICE_NAME" \
+  --query 'services[0].taskDefinition' \
+  --output text)
+
+aws ecs describe-task-definition \
+  --task-definition "$TASK_DEF" \
+  --query '{
+    Family: family,
+    Revision: revision,
+    ContainerDefinitions: containerDefinitions[].{
+      Name: name,
+      Image: image,
+      CPU: cpu,
+      Memory: memory
+    }
+  }' \
+  --output json
+
+# 5. Deployment Configuration
+echo -e "\n--- Deployment Details ---"
+aws ecs describe-services \
+  --cluster "$CLUSTER_NAME" \
+  --services "$SERVICE_NAME" \
+  --query 'services[0].deployments[*].{
+    Status: status, 
+    DesiredCount: desiredCount, 
+    RunningCount: runningCount, 
+    PendingCount: pendingCount,
+    CreatedAt: createdAt
+  }' \
+  --output json
+
+# Always continue deployment
+exit 0
+} > "$LOG_FILE_PATH"
+EOF
+  }
+}
+
 
 
 # 16. ECS Service auto_scaling  ----------------------- 
