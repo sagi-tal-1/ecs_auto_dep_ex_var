@@ -1,3 +1,5 @@
+#modules/ecs_node_role/output.tf
+
 
 output "ecs_node_role_arn" {
   description = "ARN of the ECS node IAM role"

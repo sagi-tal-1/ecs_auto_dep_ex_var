@@ -101,3 +101,8 @@ variable "log_file" {
   default     = "/var/log/ecs/user_data.log"
 }
 
+variable "container_name" {
+  description = "Base name for the container (will be suffixed with -nginx)"
+  type        = string
+  default     = "nginx_origen"  # You can change this default value as needed
+}

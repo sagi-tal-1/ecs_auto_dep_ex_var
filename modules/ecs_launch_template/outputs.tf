@@ -16,8 +16,6 @@ output "rendered_user_data" {
     log_group_name     = var.log_group_name
     log_stream_name    = var.log_stream_name
     region             = data.aws_region.current.name
-    dockerhub_username = var.dockerhub_username
-    dockerhub_password = var.dockerhub_password
     LOG_FILE           = var.log_file
     ERROR_LOG          = var.error_log
    

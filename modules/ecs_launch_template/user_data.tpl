@@ -37,16 +37,14 @@ export CLUSTER_NAME="${cluster_name}"
 export LOG_GROUP_NAME="${log_group_name}"
 export LOG_STREAM_NAME="${log_stream_name}"
 export REGION="${region}"
-export DOCKERHUB_USERNAME="${dockerhub_username}"
-export DOCKERHUB_PASSWORD="${dockerhub_password}"
+
 
 # Write environment variables to /etc/environment for persistence
 echo "CLUSTER_NAME=${cluster_name}" | sudo tee -a /etc/environment
 echo "LOG_GROUP_NAME=${log_group_name}" | sudo tee -a /etc/environment
 echo "LOG_STREAM_NAME=${log_stream_name}" | sudo tee -a /etc/environment
 echo "REGION=${region}" | sudo tee -a /etc/environment
-echo "DOCKERHUB_USERNAME=${dockerhub_username}" | sudo tee -a /etc/environment
-echo "DOCKERHUB_PASSWORD=${dockerhub_password}" | sudo tee -a /etc/environment
+
 
 # # Reload environment variables to make them available in the current session
 source /etc/environment
@@ -63,7 +61,7 @@ ECS_ENABLE_CONTAINER_METADATA=true
 ECS_ENGINE_TASK_CLEANUP_WAIT_DURATION=1h
 ECS_IMAGE_CLEANUP_INTERVAL=10m
 ECS_ENGINE_AUTH_TYPE=docker
-ECS_ENGINE_AUTH_DATA={"https://index.docker.io/v1/": {"username": "$DOCKERHUB_USERNAME", "password": "$DOCKERHUB_PASSWORD"}}
+
 ECS_DATADIR=/data
 ECS_ENABLE_SPOT_INSTANCE_DRAINING=true
 ECS_CONTAINER_STOP_TIMEOUT=30s
@@ -297,7 +295,7 @@ curl -s http://localhost:51678/v1/metadata || log "ECS agent not responding"
 # ECS_ENGINE_TASK_CLEANUP_WAIT_DURATION=1h
 # ECS_IMAGE_CLEANUP_INTERVAL=10m
 # ECS_ENGINE_AUTH_TYPE=docker
-# ECS_ENGINE_AUTH_DATA={"https://index.docker.io/v1/": {"username": "${dockerhub_username}", "password": "${dockerhub_password}"}}
+
 # ECS_DATADIR=/data
 # ECS_ENABLE_SPOT_INSTANCE_DRAINING=true
 # ECS_CONTAINER_STOP_TIMEOUT=30s

@@ -58,3 +58,25 @@ output "application_url" {
 output "module_path" {
   value = path.module
 }
+
+
+output "container_name_root" {
+  description = "Container name defined in root module"
+  value       = local.container_name
+}
+
+output "task_definition_container_name" {
+  description = "Container name used in task definition"
+  value       = module.ecs_task_definition.container_name
+}
+
+output "ecs_service_container_name" {
+  description = "Container name used in ECS service"
+  value       = module.ecs_service.container_name
+}
+
+output "full_task_definition" {
+  description = "Full task definition to verify container name in container definitions"
+  value       = jsondecode(module.ecs_task_definition.task_definition_container_definitions)
+  sensitive = true
+}

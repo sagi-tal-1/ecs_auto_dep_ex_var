@@ -242,7 +242,12 @@ module "ecs_cluster" {
   depends_on = [module.vpc]
 }
 
-
+# Option 3: Using null_resource to enforce ordering
+resource "null_resource" "cluster_ready" {
+  triggers = {
+    cluster_id = module.ecs_cluster.cluster_id
+  }
+}
 # 11. ECS Launch Template Module ----------------------- 
 # Get the latest ECS-optimized AMI in the region
 data "aws_ami" "ecs_optimized" {
@@ -287,8 +292,6 @@ module "ecs_launch_template" {
   iam_instance_profile_arn = module.ecs_node_role.ecs_instance_profile_arn
   cluster_name             = module.ecs_cluster.cluster_name
   log_group_name           = module.log_group.cloudwatch_log_group_name
-  dockerhub_username       = local.dockerhub_credentials.username
-  dockerhub_password       = local.dockerhub_credentials.password
   public_subnet_ids = module.vpc.public_subnet_ids 
   log_file                 = "/var/log/ecs/user_data.log"  # <-- Add this line
   error_log                = "/var/log/ecs_error.log"
@@ -301,7 +304,7 @@ module "ecs_launch_template" {
     ECSCluster  = module.ecs_cluster.cluster_name
   }
 
- depends_on = [module.ecs_cluster] 
+ 
  
 }
 
@@ -321,7 +324,7 @@ data "aws_instances" "ecs_instances" {
     name   = "tag:aws:autoscaling:groupName"
     values = [module.ecs_asg.autoscaling_group_name]
   }
-  depends_on = [module.ecs_asg]
+  depends_on = [module.ecs_asg, null_resource.cluster_ready]
 }
 
 
@@ -332,7 +335,7 @@ data "aws_instances" "ecs_instances" {
 # 12. Scaling Group Module ----------------------- 
 module "ecs_asg" {
   source             = "./modules/autosacling_group"
-  name_prefix        = "demo-ecs-asg-${random_id.unique.hex}"
+  name_prefix        = "demo-asg-${random_id.unique.hex}"
   subnet_ids         = module.vpc.public_subnet_ids
   min_size           = 1
   max_size           = 2
@@ -341,7 +344,7 @@ module "ecs_asg" {
   instance_name      = "demo-ecs-instance-${random_id.unique.hex}"
  
   
-  depends_on = [module.ecs_launch_template]
+  depends_on = [module.ecs_launch_template, null_resource.cluster_ready]
 
 }
 
@@ -373,13 +376,14 @@ module "ecs_capacity_provider" {
 
 # 14. ECS Task Definition Module -----------------------
 locals {
-  dockerhub_credentials = jsondecode(file("${path.module}/dockerhub_credentials.json"))
+  
+  container_name = "${var.container_name}-nginx" 
 }
 
 module "ecs_task_definition" {
   source                    = "./modules/ecs_task_definition"
   family                    = "nginx-task-${random_id.unique.hex}"
-  container_name            = "nginx"
+  container_name            = local.container_name
   docker_image              = "nginx:latest"
   log_group_name            = module.log_group.cloudwatch_log_group_name
   log_stream_prefix         = "ecs"
@@ -391,15 +395,12 @@ module "ecs_task_definition" {
   log_region                = var.aws_region
   cloudwatch_log_group_name = module.log_group.cloudwatch_log_group_name
   cloudwatch_log_group_arn  = module.log_group.cloudwatch_log_group_arn
+  
 
 
   depends_on = [module.log_group]
 }
-resource "null_resource" "docker_login" {
-  provisioner "local-exec" {
-    command = "docker login -u ${local.dockerhub_credentials.username} -p ${local.dockerhub_credentials.password}"
-  }
-}
+
 
 
 # 15. ECS Service Module -----------------------

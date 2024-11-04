@@ -1,3 +1,5 @@
+#modules/ecs_node_role/full_access_policy.tf
+
 data "aws_iam_policy_document" "full_access" {
   statement {
     effect = "Allow"

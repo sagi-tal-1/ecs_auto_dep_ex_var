@@ -27,3 +27,10 @@ output "nginx_port" {
 output "node_port" {
      value = var.node_port != null ? var.node_port : null
    }
+
+ 
+
+output "task_definition_container_definitions" {
+  description = "Container definitions JSON"
+  value       = aws_ecs_task_definition.app.container_definitions
+}

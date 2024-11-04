@@ -18,28 +18,22 @@ resource "aws_launch_template" "ecs_ec2" {
   }
 
 user_data = base64encode(<<-EOF
-    #!/bin/bash
+        #!/bin/bash
+    
+    # Wait for cluster to be active
+    sleep 15
     
     # Configure ECS Agent
     cat <<'ECSCONFIG' >> /etc/ecs/ecs.config
-    echo "ECS_CLUSTER=${var.cluster_name}" >> /etc/ecs/ecs.config
+    ECS_CLUSTER=${var.cluster_name} 
     ECS_ENGINE_AUTH_TYPE=docker
-    ECS_ENGINE_AUTH_DATA={"https://index.docker.io/v1/":{"username":"my_name","password":"mWgi29022025!@#","email":"sergyfxb@gmail.com"}}
     ECS_LOGLEVEL=debug
     ECS_WARM_POOLS_CHECK=true
     ECS_CONTAINER_METADATA_URI_ENDPOINT=v4
+    ECS_DOCKER_API_VERSION=1.44
     ECSCONFIG
     
-    # Configure Docker Daemon
-    cat <<'DOCKERCONFIG' >/etc/docker/daemon.json
-    {
-        "debug": true,
-        "userland-proxy": false
-    }
-    DOCKERCONFIG
-    
-    # Restart Docker daemon
-    systemctl restart docker --no-block
+   
   EOF
   )
 

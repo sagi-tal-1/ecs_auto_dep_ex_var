@@ -70,16 +70,6 @@ variable "tags" {
   default     = {}
 }
 
-variable "dockerhub_username" {
-  description = "Docker Hub username"
-  type        = string
-}
-
-variable "dockerhub_password" {
-  description = "Docker Hub password"
-  type        = string
-  sensitive   = true
-}
 
 variable "log_file" {
   description = "Path to the log file for ECS user data script."

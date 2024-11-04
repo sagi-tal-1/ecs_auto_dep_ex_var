@@ -24,3 +24,9 @@ output "service_url" {
   description = "URL of the service (ALB DNS)"
   value       = var.alb_dns_name
 }
+
+output "container_name" {
+  description = "Container name used in ECS service"
+  value       = var.container_name
+}
+

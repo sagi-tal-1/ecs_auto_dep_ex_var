@@ -10,11 +10,13 @@ resource "aws_ecs_task_definition" "app" {
 
   container_definitions = jsonencode([
     {
-      name      = "${var.container_name}-nginx"
+      name      = var.container_name 
       image     = var.docker_image
       cpu       = var.cpu
       memory    = var.memory
       essential = true
+
+     
       portMappings = [
         {
           containerPort = var.nginx_port
@@ -31,7 +33,13 @@ resource "aws_ecs_task_definition" "app" {
         }
       }
     }
+  
   ])
+
+
+
+
+
 
   volume {
     name      = "nginx-logs"
