@@ -1,3 +1,5 @@
+
+# modules/alb/virabels.tf
 variable "name_prefix" {
   description = "Prefix to use for resource names"
   type        = string
@@ -21,4 +23,16 @@ variable "subnet_ids" {
 variable "nginx_port" {
   description = "Port number for Nginx container"
   type        = number
+}
+
+variable "nodejs_port" {
+  description = "Port number for Node.js application"
+  type        = number
+  default     = 3000
+}
+
+variable "nodejs_health_check_path" {
+  description = "Health check path for Node.js application"
+  type        = string
+  default     = "/health"
 }

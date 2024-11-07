@@ -1,3 +1,4 @@
+# moduls/alb/main.tf
 resource "aws_security_group" "http" {
   name_prefix = "http-sg-"
   description = "Allow all HTTP/HTTPS traffic from public"
@@ -101,5 +102,54 @@ resource "aws_lb_listener" "http" {
   default_action {
     type             = "forward"
     target_group_arn = aws_lb_target_group.app.arn
+  }
+}
+
+
+ #Add NodeJS target group
+resource "aws_lb_target_group" "nodejs" {
+  name        = substr("tg-nodejs-${var.name_prefix}-${random_id.target_group_suffix.hex}", 0, 32)
+  port        = 3000  # Default Node.js port
+  protocol    = "HTTP"
+  vpc_id      = var.vpc_id
+  target_type = "instance"
+
+  lifecycle {
+    create_before_destroy = true
+    replace_triggered_by = [
+      random_id.target_group_suffix
+    ]
+  }
+
+  health_check {
+    path                = "/health"  # Adjust based on your Node.js app health check endpoint
+    healthy_threshold   = 2
+    unhealthy_threshold = 10
+    timeout             = 30
+    interval            = 60
+    matcher             = "200,301,302"
+  }
+
+  stickiness {
+    type            = "lb_cookie"
+    cookie_duration = 86400
+    enabled         = true
+  }
+}
+
+# Add listener rule for Node.js
+resource "aws_lb_listener_rule" "nodejs" {
+  listener_arn = aws_lb_listener.http.arn
+  priority     = 100
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.nodejs.arn
+  }
+
+  condition {
+    path_pattern {
+      values = ["/api/*"]  # Adjust based on your Node.js app path patterns
+    }
   }
 }

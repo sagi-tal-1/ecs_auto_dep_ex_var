@@ -25,10 +25,7 @@ variable "desired_count" {
   type        = number
 }
 
-variable "subnet_ids" {
-  description = "List of subnet IDs"
-  type        = list(string)
-}
+
 
 variable "target_group_arn" {
   description = "ARN of the target group"
@@ -53,11 +50,6 @@ variable "vpc_id" {
 variable "name_prefix" {
   description = "Prefix for the service name"
   type        = string
-}
-
-variable "public_subnet_ids" {
-  description = "List of public subnet IDs"
-  type        = list(string)
 }
 
 variable "cloudwatch_log_group_name" {

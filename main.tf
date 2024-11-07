@@ -2,7 +2,7 @@ terraform {
   required_providers {
     aws = {
       source  = "hashicorp/aws"
-      version = "~> 5.8"
+      version = "~> 5"
     }
     random = {
       source  = "hashicorp/random"
@@ -185,7 +185,8 @@ module "ecs_node_sg" {
   vpc_id                = module.vpc.vpc_id
   alb_security_group_id = module.alb.security_group_id
   nginx_port            = module.ecs_task_definition.nginx_port
-  node_port             = module.ecs_task_definition.node_port
+  node_port             = module.ecs_task_definition_node.node_port
+
 }
 
 # Load Balancer -----------------------
@@ -197,6 +198,7 @@ module "alb" {
   vpc_id      = module.vpc.vpc_id
   subnet_ids  = module.vpc.public_subnet_ids
   nginx_port  = module.ecs_task_definition.nginx_port
+  
 
   
 }
@@ -387,8 +389,8 @@ module "ecs_task_definition" {
   docker_image              = "nginx:latest"
   log_group_name            = module.log_group.cloudwatch_log_group_name
   log_stream_prefix         = "ecs"
-  cpu                       = 256
-  memory                    = 512
+  cpu                 = 1024
+  memory              = 1024
   nginx_port                = 80
   task_role_arn             = module.ecs_task_role.task_role_arn
   execution_role_arn        = module.ecs_task_role.execution_role_arn
@@ -398,10 +400,30 @@ module "ecs_task_definition" {
   
 
 
+
   depends_on = [module.log_group]
 }
 
+module "ecs_task_definition_node"  {
+  source                    = "./modules/ecs_task_definition_node"
+  family                    = "node-task-${random_id.unique.hex}"
+  container_name            = local.container_name
+  docker_image              = "nodejs:latest"
+  log_group_name            = module.log_group.cloudwatch_log_group_name
+  log_stream_prefix         = "ecs"
+  cpu                       = 128
+  memory                    = 128
+  nodejs_port               = 3000
+  task_role_arn             = module.ecs_task_role.task_role_arn
+  execution_role_arn        = module.ecs_task_role.execution_role_arn
+  log_region                = var.aws_region
+  log_group_arn             = module.log_group.cloudwatch_log_group_arn
+  
 
+
+
+  depends_on = [module.log_group]
+}
 
 # 15. ECS Service Module -----------------------
 module "ecs_service" {
@@ -412,13 +434,11 @@ module "ecs_service" {
   ecs_cluster_id            = module.ecs_cluster.ecs_cluster_id
   task_definition_arn       = module.ecs_task_definition.task_definition_arn
   desired_count             = 1
-  subnet_ids                = module.vpc.public_subnet_ids
   target_group_arn          = module.alb.target_group_arn
   container_name            = module.ecs_task_definition.container_name
   nginx_port                = module.ecs_task_definition.nginx_port
   capacity_provider_name    = module.ecs_capacity_provider.capacity_provider_name
   vpc_id                    = module.vpc.vpc_id
-  public_subnet_ids         = module.vpc.public_subnet_ids
   security_group_id         = module.ecs_node_sg.security_group_id
   log_group_arn             = module.log_group.cloudwatch_log_group_arn
   cloudwatch_log_group_name = module.log_group.cloudwatch_log_group_name
@@ -551,6 +571,156 @@ exit 0
 EOF
   }
 }
+
+
+module "ecs_service_nodes" {
+  source                    = "./modules/ecs_service_nods"
+  nodejs_name_prefix               = var.name_prefix
+  service_name                     = "${var.name_prefix}-ecs-service-nodes${random_id.unique.hex}"
+  cluster_id                       = module.ecs_cluster.ecs_cluster_id
+  nodejs_task_definition_arn       = module.ecs_task_definition.task_definition_arn
+  desired_count                    = 1
+  nodejs_target_group_arn          = module.alb.target_group_nodejs_arn
+  nodejs_container_name            = module.ecs_task_definition.container_name
+  nodejs_port                      = module.ecs_task_definition_node.node_port
+  capacity_provider_name           = module.ecs_capacity_provider.capacity_provider_name
+  security_group_id                = module.ecs_node_sg.security_group_id
+  alb_listener_arn                 = module.alb.listener_nodejs_arn
+
+  alb_dns_name = module.alb.alb_dns_name
+
+
+  depends_on = [
+    module.ecs_capacity_provider,
+    module.ecs_cluster,
+    module.alb,
+    module.ecs_asg
+  ]
+}
+
+resource "null_resource" "check_task_status_node" {
+  depends_on = [module.ecs_service]
+  
+  triggers = {
+    service_id = module.ecs_service.service_id
+  }
+  
+  provisioner "local-exec" {
+    environment = {
+      CLUSTER_NAME     = module.ecs_cluster.cluster_name
+      SERVICE_NAME     = module.ecs_service.service_name
+      TIMESTAMP        = formatdate("YYYYMMDDhhmmss", timestamp())
+      LOG_FILE_PATH    = "${path.module}/ecs_deployment_logs/ecs_deployment_${formatdate("YYYYMMDDhhmmss", timestamp())}.log"
+    }
+
+    interpreter = ["/bin/bash", "-c"]
+    command     = <<EOF
+# Create logs directory if it doesn't exist
+mkdir -p "${path.module}/ecs_deployment_logs"
+
+# Redirect all output to the log file
+{
+echo "=== ECS Deployment Insights ==="
+echo "Timestamp: $TIMESTAMP"
+echo "Cluster: $CLUSTER_NAME"
+echo "Service: $SERVICE_NAME"
+echo "Log File: $LOG_FILE_PATH"
+echo "==============================="
+
+# 1. Basic Service Status
+echo -e "\n--- Service Overview ---"
+aws ecs describe-services \
+  --cluster "$CLUSTER_NAME" \
+  --services "$SERVICE_NAME" \
+  --query 'services[0].{status:status, runningCount:runningCount, desiredCount:desiredCount, pendingCount:pendingCount, events:events[0].message}' \
+  --output json
+
+# 2. List Tasks in the Service
+echo -e "\n--- Tasks in Service ---"
+aws ecs list-tasks \
+  --cluster "$CLUSTER_NAME" \
+  --service-name "$SERVICE_NAME" \
+  --output json
+
+# 3. Detailed Task Information
+echo -e "\n--- Detailed Task Descriptions ---"
+TASKS=$(aws ecs list-tasks \
+  --cluster "$CLUSTER_NAME" \
+  --service-name "$SERVICE_NAME" \
+  --query 'taskArns' \
+  --output text)
+
+if [ -n "$TASKS" ]; then
+  aws ecs describe-tasks \
+    --cluster "$CLUSTER_NAME" \
+    --tasks $TASKS \
+    --query 'tasks[].{
+      TaskArn: taskArn, 
+      LastStatus: lastStatus, 
+      DesiredStatus: desiredStatus, 
+      Health: healthStatus,
+      StartedAt: startedAt,
+      Containers: containers[].{
+        Name: name, 
+        Image: image, 
+        LastStatus: lastStatus, 
+        HealthStatus: healthStatus
+      }
+    }' \
+    --output json
+fi
+
+# 4. Task Definition Details
+echo -e "\n--- Current Task Definition ---"
+TASK_DEF=$(aws ecs describe-services \
+  --cluster "$CLUSTER_NAME" \
+  --services "$SERVICE_NAME" \
+  --query 'services[0].taskDefinition' \
+  --output text)
+
+aws ecs describe-task-definition \
+  --task-definition "$TASK_DEF" \
+  --query '{
+    Family: family,
+    Revision: revision,
+    ContainerDefinitions: containerDefinitions[].{
+      Name: name,
+      Image: image,
+      CPU: cpu,
+      Memory: memory
+    }
+  }' \
+  --output json
+
+# 5. Deployment Configuration
+echo -e "\n--- Deployment Details ---"
+aws ecs describe-services \
+  --cluster "$CLUSTER_NAME" \
+  --services "$SERVICE_NAME" \
+  --query 'services[0].deployments[*].{
+    Status: status, 
+    DesiredCount: desiredCount, 
+    RunningCount: runningCount, 
+    PendingCount: pendingCount,
+    CreatedAt: createdAt
+  }' \
+  --output json
+
+# Always continue deployment
+exit 0
+} > "$LOG_FILE_PATH"
+EOF
+  }
+}
+
+
+
+
+
+
+
+
+
 
 
 

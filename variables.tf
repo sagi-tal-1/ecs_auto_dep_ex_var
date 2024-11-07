@@ -106,3 +106,35 @@ variable "container_name" {
   type        = string
   default     = "nginx_origen"  # You can change this default value as needed
 }
+
+
+
+variable "nodejs_container_name" {
+  description = "Name of the Node.js container"
+  type        = string
+  default     = "nodejs-app"
+}
+
+
+
+# Update variables.tf in the root directory - Add these variables
+
+
+variable "nodejs_image" {
+  description = "Docker image for Node.js application"
+  type        = string
+  default     = "node:14"
+}
+
+variable "nodejs_port" {
+  description = "Port for Node.js application"
+  type        = number
+  default     = 3000
+}
+
+variable "nodejs_desired_count" {
+  description = "Desired count of Node.js tasks"
+  type        = number
+  default     = 1
+}
+

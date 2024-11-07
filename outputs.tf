@@ -70,13 +70,3 @@ output "task_definition_container_name" {
   value       = module.ecs_task_definition.container_name
 }
 
-output "ecs_service_container_name" {
-  description = "Container name used in ECS service"
-  value       = module.ecs_service.container_name
-}
-
-output "full_task_definition" {
-  description = "Full task definition to verify container name in container definitions"
-  value       = jsondecode(module.ecs_task_definition.task_definition_container_definitions)
-  sensitive = true
-}

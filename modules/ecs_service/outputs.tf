@@ -29,4 +29,3 @@ output "container_name" {
   description = "Container name used in ECS service"
   value       = var.container_name
 }
-

@@ -1,3 +1,4 @@
+# modules/
 #moduls/ecs_task_definition/main.tf
 resource "aws_ecs_task_definition" "app" {
   family                   = var.family
@@ -19,7 +20,7 @@ resource "aws_ecs_task_definition" "app" {
      
       portMappings = [
         {
-          containerPort = var.nginx_port
+          containerPort = var.nodejs_port
           hostPort      = 0
           protocol      = "tcp"
         }

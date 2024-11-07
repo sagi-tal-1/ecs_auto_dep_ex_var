@@ -22,3 +22,14 @@ output "listener_arn" {
   value       = aws_lb_listener.http.arn
 }
 
+
+
+
+output "listener_arn_node" {
+  description = "The ARN of the ALB listener"
+  value       = aws_lb_listener.http.arn
+}
+output "nodejs_target_group_arn" {
+  description = "The ARN of the Node.js target group"
+  value       = aws_lb_target_group.nodejs.arn
+}

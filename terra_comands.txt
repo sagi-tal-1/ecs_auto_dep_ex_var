@@ -1,0 +1,5 @@
+$generate and share the exact JSON output of the container definitions
+
+terraform plan -out=tfplan
+terraform show -json tfplan | jq '.planned_values.root_module.child_modules[].resources[] | select(.type == "aws_ecs_task_definition")'
+terraform plan -out=tfplan                                                                                                             

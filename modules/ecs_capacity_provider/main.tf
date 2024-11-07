@@ -1,3 +1,5 @@
+#Moduls/ecs_capacity_provider/main.tf
+
 resource "aws_ecs_capacity_provider" "main" {
   name = var.capacity_provider_name
 

@@ -1,12 +1,17 @@
-# modules/ecs_service/main.tf
+# modules/ecs_service_nodes/main.tf
 
-resource "aws_ecs_service" "app" {
-  name                               = var.service_name
+resource "aws_ecs_service" "nodejs" {
+  name                              = var.service_name
   cluster                           = var.cluster_id
-  task_definition                   = var.task_definition_arn
+  task_definition                   = var.nodejs_task_definition_arn
   desired_count                     = var.desired_count
   health_check_grace_period_seconds = 120
   force_new_deployment              = true
+  
+  ordered_placement_strategy {
+    type  = "binpack"
+    field = "cpu"
+  }
 
   depends_on = [var.alb_listener_arn]
 
@@ -33,9 +38,9 @@ resource "aws_ecs_service" "app" {
 
   # Load balancer configuration
   load_balancer {
-    target_group_arn = var.target_group_arn
-    container_name   = var.container_name
-    container_port   = var.nginx_port
+    target_group_arn = var.nodejs_target_group_arn
+    container_name   = var.nodejs_container_name
+    container_port   = var.nodejs_port
   }
 
   # Deployment settings
@@ -68,15 +73,12 @@ resource "aws_ecs_service" "app" {
 }
 
 # Security group rule for ECS tasks
-resource "aws_security_group_rule" "allow_alb_to_ecs" {
+resource "aws_security_group_rule" "allow_alb_to_nodejs" {
   type                     = "ingress"
-  from_port                = var.nginx_port
-  to_port                  = var.nginx_port
+  from_port                = var.nodejs_port
+  to_port                  = var.nodejs_port
   protocol                 = "tcp"
   source_security_group_id = var.security_group_id
   security_group_id        = var.security_group_id
-  description             = "Allow ALB to ECS tasks"
+  description             = "Allow ALB to Node.js ECS tasks"
 }
-
-
-
