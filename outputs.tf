@@ -60,12 +60,16 @@ output "module_path" {
 }
 
 
-output "container_name_root" {
-  description = "Container name defined in root module"
-  value       = local.container_name
+output "container_names" {
+  description = "Names of the containers"
+  value = {
+    nginx = local.container_name_nginx
+    nodejs = local.container_name_nodejs
+  }
 }
 
-output "task_definition_container_name" {
+
+output "task_definition_container_name_for_nginx" {
   description = "Container name used in task definition"
   value       = module.ecs_task_definition.container_name
 }

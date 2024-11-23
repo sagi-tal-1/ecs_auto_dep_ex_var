@@ -21,9 +21,14 @@ variable "nginx_port" {
   type        = number
 }
 
-variable "node_port" {
-  description = "Port number for Node.js container"
-  type        = number
-}
+# variable "node_port" {
+#   description = "Port number for Node.js container"
+#   type        = number
+# }
 
+variable "nat_gateway_cidrs" {
+  description = "CIDR blocks of NAT Gateways to allow inbound traffic from"
+  type        = list(string)
+  default     = []
+}
 

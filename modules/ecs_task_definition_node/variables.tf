@@ -51,3 +51,11 @@ variable "log_group_arn" {
   description = "ARN of the CloudWatch Log Group"
   type        = string
 }
+
+# modules/ecs_task_definition_node/variables.tf
+variable "desired_count" {
+  description = "Number of task definitions to create"
+  type        = number
+  default     = 2
+}
+

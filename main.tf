@@ -185,7 +185,7 @@ module "ecs_node_sg" {
   vpc_id                = module.vpc.vpc_id
   alb_security_group_id = module.alb.security_group_id
   nginx_port            = module.ecs_task_definition.nginx_port
-  node_port             = module.ecs_task_definition_node.node_port
+  # node_port = module.ecs_task_definition_node.nodejs_port
 
 }
 
@@ -379,18 +379,20 @@ module "ecs_capacity_provider" {
 # 14. ECS Task Definition Module -----------------------
 locals {
   
-  container_name = "${var.container_name}-nginx" 
+  container_name_nginx = "${var.container_name}-nginx" 
+  container_name_nodejs = "${var.container_name}-nodejs"
+  
 }
 
 module "ecs_task_definition" {
   source                    = "./modules/ecs_task_definition"
   family                    = "nginx-task-${random_id.unique.hex}"
-  container_name            = local.container_name
+  container_name            = local.container_name_nginx
   docker_image              = "nginx:latest"
   log_group_name            = module.log_group.cloudwatch_log_group_name
   log_stream_prefix         = "ecs"
-  cpu                 = 1024
-  memory              = 1024
+  cpu                 = 128
+  memory              = 256
   nginx_port                = 80
   task_role_arn             = module.ecs_task_role.task_role_arn
   execution_role_arn        = module.ecs_task_role.execution_role_arn
@@ -407,7 +409,7 @@ module "ecs_task_definition" {
 module "ecs_task_definition_node"  {
   source                    = "./modules/ecs_task_definition_node"
   family                    = "node-task-${random_id.unique.hex}"
-  container_name            = local.container_name
+  container_name            = local.container_name_nodejs  # Use the first nodejs container name
   docker_image              = "nodejs:latest"
   log_group_name            = module.log_group.cloudwatch_log_group_name
   log_stream_prefix         = "ecs"
@@ -434,8 +436,8 @@ module "ecs_service" {
   ecs_cluster_id            = module.ecs_cluster.ecs_cluster_id
   task_definition_arn       = module.ecs_task_definition.task_definition_arn
   desired_count             = 1
-  target_group_arn          = module.alb.target_group_arn
-  container_name            = module.ecs_task_definition.container_name
+  target_group_arn          = module.alb.nginx_target_group_arn
+  container_name            = local.container_name_nginx
   nginx_port                = module.ecs_task_definition.nginx_port
   capacity_provider_name    = module.ecs_capacity_provider.capacity_provider_name
   vpc_id                    = module.vpc.vpc_id
@@ -574,20 +576,32 @@ EOF
 
 
 module "ecs_service_nodes" {
-  source                    = "./modules/ecs_service_nods"
-  nodejs_name_prefix               = var.name_prefix
-  service_name                     = "${var.name_prefix}-ecs-service-nodes${random_id.unique.hex}"
-  cluster_id                       = module.ecs_cluster.ecs_cluster_id
-  nodejs_task_definition_arn       = module.ecs_task_definition.task_definition_arn
-  desired_count                    = 1
-  nodejs_target_group_arn          = module.alb.target_group_nodejs_arn
-  nodejs_container_name            = module.ecs_task_definition.container_name
-  nodejs_port                      = module.ecs_task_definition_node.node_port
-  capacity_provider_name           = module.ecs_capacity_provider.capacity_provider_name
-  security_group_id                = module.ecs_node_sg.security_group_id
-  alb_listener_arn                 = module.alb.listener_nodejs_arn
+  source                    = "./modules/ecs_service_nodes"
 
-  alb_dns_name = module.alb.alb_dns_name
+  service_name                     = var.service_name
+  cluster_id                       = module.ecs_cluster.ecs_cluster_id
+  container_name                   = local.container_name_nodejs
+  task_definition_arn              = module.ecs_task_definition_node.task_definition_arn  # For the first task definition
+
+  desired_count                    = 2
+  capacity_provider_name           = module.ecs_capacity_provider.capacity_provider_name
+
+  nodejs_target_group_arn             =  module.alb.nodejs_target_group_arn
+  nodejs_port                     = 3000
+  
+  private_subnets         = module.vpc.private_subnet_ids 
+  private_subnet_ids = module.vpc.private_subnet_ids 
+  security_group_id                = module.ecs_node_sg.security_group_id
+  alb_security_group_id = module.alb.nodejs_security_group_id
+
+  service_number = "001"  # or use a variable if multiple services
+  environment    = "Dev"
+  
+  tags = {
+    Environment = var.environment
+    Service     = "nodejs"
+    Terraform   = "true"
+  }
 
 
   depends_on = [
@@ -597,6 +611,8 @@ module "ecs_service_nodes" {
     module.ecs_asg
   ]
 }
+
+
 
 resource "null_resource" "check_task_status_node" {
   depends_on = [module.ecs_service]
@@ -611,6 +627,7 @@ resource "null_resource" "check_task_status_node" {
       SERVICE_NAME     = module.ecs_service.service_name
       TIMESTAMP        = formatdate("YYYYMMDDhhmmss", timestamp())
       LOG_FILE_PATH    = "${path.module}/ecs_deployment_logs/ecs_deployment_${formatdate("YYYYMMDDhhmmss", timestamp())}.log"
+      VPC_ID           = module.vpc.vpc_id  # Add VPC ID for network cleanup
     }
 
     interpreter = ["/bin/bash", "-c"]
@@ -620,91 +637,117 @@ mkdir -p "${path.module}/ecs_deployment_logs"
 
 # Redirect all output to the log file
 {
-echo "=== ECS Deployment Insights ==="
+echo "=== ECS Deployment Cleanup Insights ==="
 echo "Timestamp: $TIMESTAMP"
 echo "Cluster: $CLUSTER_NAME"
 echo "Service: $SERVICE_NAME"
+echo "VPC: $VPC_ID"
 echo "Log File: $LOG_FILE_PATH"
 echo "==============================="
 
-# 1. Basic Service Status
-echo -e "\n--- Service Overview ---"
-aws ecs describe-services \
-  --cluster "$CLUSTER_NAME" \
-  --services "$SERVICE_NAME" \
-  --query 'services[0].{status:status, runningCount:runningCount, desiredCount:desiredCount, pendingCount:pendingCount, events:events[0].message}' \
-  --output json
+# 1. Advanced Service and Task Cleanup for awsvpc
+echo -e "\n--- Comprehensive Service Cleanup ---"
 
-# 2. List Tasks in the Service
-echo -e "\n--- Tasks in Service ---"
-aws ecs list-tasks \
-  --cluster "$CLUSTER_NAME" \
-  --service-name "$SERVICE_NAME" \
-  --output json
-
-# 3. Detailed Task Information
-echo -e "\n--- Detailed Task Descriptions ---"
-TASKS=$(aws ecs list-tasks \
+# Fetch all task ARNs in the service
+TASK_ARNS=$(aws ecs list-tasks \
   --cluster "$CLUSTER_NAME" \
   --service-name "$SERVICE_NAME" \
   --query 'taskArns' \
   --output text)
 
-if [ -n "$TASKS" ]; then
+# Detailed task description with awsvpc network details
+if [ -n "$TASK_ARNS" ]; then
+  echo -e "\n--- Detailed Task Network Analysis ---"
   aws ecs describe-tasks \
     --cluster "$CLUSTER_NAME" \
-    --tasks $TASKS \
+    --tasks $TASK_ARNS \
     --query 'tasks[].{
       TaskArn: taskArn, 
       LastStatus: lastStatus, 
-      DesiredStatus: desiredStatus, 
-      Health: healthStatus,
-      StartedAt: startedAt,
+      NetworkMode: networkMode,
+      NetworkInterfaces: networkInterfaces[].{
+        AttachmentId: attachmentId,
+        PrivateIpv4Address: privateIpv4Address,
+        SubnetId: subnetId
+      },
       Containers: containers[].{
         Name: name, 
         Image: image, 
         LastStatus: lastStatus, 
-        HealthStatus: healthStatus
+        NetworkInterfaces: networkInterfaces
       }
     }' \
     --output json
+
+  # Stop and remove tasks if they are in a non-running state
+  for TASK_ARN in $TASK_ARNS; do
+    TASK_STATUS=$(aws ecs describe-tasks \
+      --cluster "$CLUSTER_NAME" \
+      --tasks "$TASK_ARN" \
+      --query 'tasks[0].lastStatus' \
+      --output text)
+    
+    if [[ "$TASK_STATUS" != "RUNNING" ]]; then
+      echo "Stopping non-running task: $TASK_ARN"
+      aws ecs stop-task \
+        --cluster "$CLUSTER_NAME" \
+        --task "$TASK_ARN"
+    fi
+  done
 fi
 
-# 4. Task Definition Details
-echo -e "\n--- Current Task Definition ---"
-TASK_DEF=$(aws ecs describe-services \
+# 2. Network Interface Cleanup for awsvpc
+echo -e "\n--- Network Interface Cleanup ---"
+# Fetch and remove orphaned network interfaces in the VPC
+NETWORK_INTERFACES=$(aws ec2 describe-network-interfaces \
+  --filters "Name=vpc-id,Values=$VPC_ID" \
+            "Name=description,Values=*ecs-task*" \
+  --query 'NetworkInterfaces[?Status==`available`].NetworkInterfaceId' \
+  --output text)
+
+for INTERFACE_ID in $NETWORK_INTERFACES; do
+  echo "Deleting orphaned network interface: $INTERFACE_ID"
+  aws ec2 delete-network-interface --network-interface-id "$INTERFACE_ID"
+done
+
+# 3. ECS Service Scaling and Cleanup
+echo -e "\n--- Service Scaling to Zero ---"
+aws ecs update-service \
+  --cluster "$CLUSTER_NAME" \
+  --service "$SERVICE_NAME" \
+  --desired-count 0
+
+# 4. Task Definition Cleanup
+echo -e "\n--- Task Definition Management ---"
+# List and potentially deregister old task definition revisions
+TASK_FAMILY=$(aws ecs describe-services \
   --cluster "$CLUSTER_NAME" \
   --services "$SERVICE_NAME" \
   --query 'services[0].taskDefinition' \
+  --output text | cut -d':' -f1)
+
+# Deregister older task definition revisions (keep last 3)
+REVISIONS=$(aws ecs list-task-definition-families \
+  --query "families[?contains(@, '$TASK_FAMILY')]" \
   --output text)
 
-aws ecs describe-task-definition \
-  --task-definition "$TASK_DEF" \
-  --query '{
-    Family: family,
-    Revision: revision,
-    ContainerDefinitions: containerDefinitions[].{
-      Name: name,
-      Image: image,
-      CPU: cpu,
-      Memory: memory
-    }
-  }' \
-  --output json
+for REV in $REVISIONS; do
+  FULL_REVISION=$(aws ecs describe-task-definition \
+    --task-definition "$REV" \
+    --query 'taskDefinition.taskDefinitionArn' \
+    --output text)
+  
+  # Logic to keep only recent revisions
+  aws ecs deregister-task-definition \
+    --task-definition "$FULL_REVISION"
+done
 
-# 5. Deployment Configuration
-echo -e "\n--- Deployment Details ---"
-aws ecs describe-services \
-  --cluster "$CLUSTER_NAME" \
-  --services "$SERVICE_NAME" \
-  --query 'services[0].deployments[*].{
-    Status: status, 
-    DesiredCount: desiredCount, 
-    RunningCount: runningCount, 
-    PendingCount: pendingCount,
-    CreatedAt: createdAt
-  }' \
-  --output json
+# Final Service Deletion (use with caution)
+# Uncomment if you want to completely remove the service
+# aws ecs delete-service \
+#   --cluster "$CLUSTER_NAME" \
+#   --service "$SERVICE_NAME" \
+#   --force
 
 # Always continue deployment
 exit 0
@@ -712,16 +755,6 @@ exit 0
 EOF
   }
 }
-
-
-
-
-
-
-
-
-
-
 
 
 # 16. ECS Service auto_scaling  ----------------------- 
@@ -763,3 +796,8 @@ module "destroy" {
     module.route_table
   ]
 }
+
+####TF_LOG=TRACE terraform apply -auto-approve > detailed_apply_trace.log 2>&1
+#ami-0b9369f8572860559
+
+

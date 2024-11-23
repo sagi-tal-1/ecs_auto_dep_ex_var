@@ -13,4 +13,7 @@
      value       = aws_eip.nat.id
    }
 
- 
+ output "nat_gateway_private_ip" {
+  description = "Private IP address of the NAT Gateway"
+  value       = aws_nat_gateway.main.private_ip
+}

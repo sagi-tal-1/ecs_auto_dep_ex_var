@@ -59,7 +59,6 @@ user_data = base64encode(<<-EOF
 
 
 
-
 # data "aws_region" "current" {}
 
 # resource "aws_launch_template" "ecs_ec2" {

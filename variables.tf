@@ -137,4 +137,25 @@ variable "nodejs_desired_count" {
   type        = number
   default     = 1
 }
+# Root variables.tf
+
+variable "service_name" {
+  description = "Name of the ECS service"
+  type        = string
+  default     = "ECS_service"
+}
+
+variable "environment" {
+  description = "Environment name"
+  type        = string
+  default     = "Dev"
+}
+
+
+
+variable "tags" {
+  description = "A map of tags to add to all resources"
+  type        = map(string)
+  default     = {}
+}
 

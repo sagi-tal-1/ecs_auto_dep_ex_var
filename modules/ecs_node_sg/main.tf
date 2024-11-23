@@ -65,6 +65,29 @@ resource "aws_security_group_rule" "allow_all_vpc" {
   security_group_id = aws_security_group.ecs_node_sg.id
 }
 
+######
+# # Allow traffic from NAT Gateway
+# resource "aws_security_group_rule" "allow_nat_gateway" {
+#   type              = "ingress"
+#   from_port         = 0
+#   to_port           = 65535
+#   protocol          = "tcp"
+#   cidr_blocks       = var.nat_gateway_cidrs
+#   security_group_id = aws_security_group.ecs_node_sg.id
+#   description       = "Allow inbound traffic from NAT Gateway"
+# }
+
+# # Allow container ports
+# resource "aws_security_group_rule" "allow_container_ports" {
+#   type              = "ingress"
+#   from_port         = 0
+#   to_port           = 65535
+#   protocol          = "tcp"
+#   cidr_blocks       = ["0.0.0.0/0"]
+#   security_group_id = aws_security_group.ecs_node_sg.id
+#   description       = "Allow inbound traffic on container ports"
+# }
+#####
 data "aws_vpc" "selected" {
   id = var.vpc_id
 }

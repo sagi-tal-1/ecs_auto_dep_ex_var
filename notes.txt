@@ -3,7 +3,120 @@
 
 
 
+resource "null_resource" "check_task_status_node" {
+  depends_on = [module.ecs_service]
+  
+  triggers = {
+    service_id = module.ecs_service.service_id
+  }
+  
+  provisioner "local-exec" {
+    environment = {
+      CLUSTER_NAME     = module.ecs_cluster.cluster_name
+      SERVICE_NAME     = module.ecs_service.service_name
+      TIMESTAMP        = formatdate("YYYYMMDDhhmmss", timestamp())
+      LOG_FILE_PATH    = "${path.module}/ecs_deployment_logs/ecs_deployment_${formatdate("YYYYMMDDhhmmss", timestamp())}.log"
+    }
 
+    interpreter = ["/bin/bash", "-c"]
+    command     = <<EOF
+# Create logs directory if it doesn't exist
+mkdir -p "${path.module}/ecs_deployment_logs"
+
+# Redirect all output to the log file
+{
+echo "=== ECS Deployment Insights ==="
+echo "Timestamp: $TIMESTAMP"
+echo "Cluster: $CLUSTER_NAME"
+echo "Service: $SERVICE_NAME"
+echo "Log File: $LOG_FILE_PATH"
+echo "==============================="
+
+# 1. Basic Service Status
+echo -e "\n--- Service Overview ---"
+aws ecs describe-services \
+  --cluster "$CLUSTER_NAME" \
+  --services "$SERVICE_NAME" \
+  --query 'services[0].{status:status, runningCount:runningCount, desiredCount:desiredCount, pendingCount:pendingCount, events:events[0].message}' \
+  --output json
+
+# 2. List Tasks in the Service
+echo -e "\n--- Tasks in Service ---"
+aws ecs list-tasks \
+  --cluster "$CLUSTER_NAME" \
+  --service-name "$SERVICE_NAME" \
+  --output json
+
+# 3. Detailed Task Information
+echo -e "\n--- Detailed Task Descriptions ---"
+TASKS=$(aws ecs list-tasks \
+  --cluster "$CLUSTER_NAME" \
+  --service-name "$SERVICE_NAME" \
+  --query 'taskArns' \
+  --output text)
+
+if [ -n "$TASKS" ]; then
+  aws ecs describe-tasks \
+    --cluster "$CLUSTER_NAME" \
+    --tasks $TASKS \
+    --query 'tasks[].{
+      TaskArn: taskArn, 
+      LastStatus: lastStatus, 
+      DesiredStatus: desiredStatus, 
+      Health: healthStatus,
+      StartedAt: startedAt,
+      Containers: containers[].{
+        Name: name, 
+        Image: image, 
+        LastStatus: lastStatus, 
+        HealthStatus: healthStatus
+      }
+    }' \
+    --output json
+fi
+
+# 4. Task Definition Details
+echo -e "\n--- Current Task Definition ---"
+TASK_DEF=$(aws ecs describe-services \
+  --cluster "$CLUSTER_NAME" \
+  --services "$SERVICE_NAME" \
+  --query 'services[0].taskDefinition' \
+  --output text)
+
+aws ecs describe-task-definition \
+  --task-definition "$TASK_DEF" \
+  --query '{
+    Family: family,
+    Revision: revision,
+    ContainerDefinitions: containerDefinitions[].{
+      Name: name,
+      Image: image,
+      CPU: cpu,
+      Memory: memory
+    }
+  }' \
+  --output json
+
+# 5. Deployment Configuration
+echo -e "\n--- Deployment Details ---"
+aws ecs describe-services \
+  --cluster "$CLUSTER_NAME" \
+  --services "$SERVICE_NAME" \
+  --query 'services[0].deployments[*].{
+    Status: status, 
+    DesiredCount: desiredCount, 
+    RunningCount: runningCount, 
+    PendingCount: pendingCount,
+    CreatedAt: createdAt
+  }' \
+  --output json
+
+# Always continue deployment
+exit 0
+} > "$LOG_FILE_PATH"
+EOF
+  }
+}
 
 In this post, we will focus on how to set up an ECS cluster of EC2 instances using Terraform.
 
