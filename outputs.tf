@@ -63,7 +63,7 @@ output "module_path" {
 output "container_names" {
   description = "Names of the containers"
   value = {
-    nginx = local.container_name_nginx
+    nginx  = local.container_name_nginx
     nodejs = local.container_name_nodejs
   }
 }
@@ -74,3 +74,9 @@ output "task_definition_container_name_for_nginx" {
   value       = module.ecs_task_definition.container_name
 }
 
+output "debug_ecs_service" {
+  value = {
+    service_id = module.ecs_service_nodes.service_id
+    service_name = module.ecs_service_nodes.service_name
+  }
+}

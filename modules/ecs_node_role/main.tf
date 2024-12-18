@@ -12,7 +12,7 @@ data "aws_iam_policy_document" "ecs_node_doc" {
   }
 }
 
-# Combined permissions policy document
+# permissions policy document
 data "aws_iam_policy_document" "ecs_node_permissions" {
   statement {
     effect = "Allow"
@@ -88,11 +88,62 @@ data "aws_iam_policy_document" "ecs_node_permissions" {
       "logs:DescribeLogGroups",
       "logs:PutRetentionPolicy",
       
-      # Systems Manager Permissions
+      # Systems Manager Permissions (Enhanced)
       "ssm:GetParameter",
       "ssm:GetParameters",
       "ssm:GetParametersByPath",
       "ssm:UpdateInstanceInformation",
+      "ssm:DescribeParameters",
+      "ssm:PutParameter",
+      "ssm:DeleteParameter",
+      "ssm:DeleteParameters",
+      "ssm:AddTagsToResource",
+      "ssm:RemoveTagsFromResource",
+      "ssm:ListTagsForResource",
+      "ssm:GetParameterHistory",
+      "ssm:LabelParameterVersion",
+      "ssm:GetServiceSetting",
+      "ssm:UpdateServiceSetting",
+      "ssm:ResetServiceSetting",
+      "ssm:StartSession",
+      "ssm:TerminateSession",
+      "ssm:ResumeSession",
+      "ssm:DescribeSessions",
+      "ssm:GetConnectionStatus",
+      "ssm:DescribeInstanceInformation",
+      "ssm:DescribeInstanceProperties",
+      "ssm:DescribeInstanceAssociations",
+      "ssm:GetDocument",
+      "ssm:ListDocuments",
+      "ssm:ListDocumentVersions",
+      "ssm:DescribeDocument",
+      "ssm:DescribeDocumentParameters",
+      "ssm:DescribeInstancePatches",
+      "ssm:DescribeInstancePatchStates",
+      "ssm:DescribePatchBaselines",
+      "ssm:GetDefaultPatchBaseline",
+      "ssm:GetPatchBaseline",
+      "ssm:ListAssociations",
+      "ssm:ListInstanceAssociations",
+      "ssm:UpdateInstanceAssociationStatus",
+      "ssm:CreateAssociation",
+      "ssm:DeleteAssociation",
+      "ssm:UpdateAssociation",
+      "ssm:ListCommandInvocations",
+      "ssm:ListCommands",
+      "ssm:SendCommand",
+      "ssm:GetCommandInvocation",
+      "ssm:CancelCommand",
+      "ssm:CreateActivation",
+      "ssm:DeleteActivation",
+      "ssm:GetActivations",
+      "ssm:UpdateManagedInstanceRole",
+      
+      # SSM Session Manager Permissions
+      "ssmmessages:CreateControlChannel",
+      "ssmmessages:CreateDataChannel",
+      "ssmmessages:OpenControlChannel",
+      "ssmmessages:OpenDataChannel",
       
       # Service Discovery Permissions
       "servicediscovery:DiscoverInstances",

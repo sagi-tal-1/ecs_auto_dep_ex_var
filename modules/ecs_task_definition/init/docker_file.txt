@@ -1,0 +1,656 @@
+ROM public.ecr.aws/r5j4x4k4/elemy/nginx-dynamic-healthcheck:latest
+
+# Install required packages
+RUN apk add --no-cache \
+    curl \
+    bash \
+    supervisor \
+    docker \
+    python3 \
+    py3-pip \
+    groff \
+    less \
+    git \
+    && pip3 install --no-cache-dir awscli \
+    && rm -rf /var/cache/apk/*
+
+# Create necessary directories
+RUN mkdir -p /var/log/supervisor
+
+# Copy configuration files
+COPY supervisord.conf /etc/supervisord.conf
+COPY discover_containers.sh /usr/local/bin/discover_containers.sh
+
+# Make scripts executable
+RUN chmod +x /usr/local/bin/discover_containers.sh
+
+# Initial nginx config
+RUN echo $'server {\n\
+    listen 80;\n\
+    server_name _;\n\
+    location = /health {\n\
+        return 200 "healthy";\n\
+        add_header Content-Type text/plain;\n\
+    }\n\
+    location / {\n\
+        return 503 "Service is initializing...";\n\
+    }\n\
+}' > /etc/nginx/conf.d/default.conf
+
+EXPOSE 80
+
+ENTRYPOINT ["/usr/bin/supervisord", "-c", "/etc/supervisord.conf"]
+
+
+apk add --no-cache \
+bash \
+bind-tools \
+curl
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+cat << 'EOF' > discover_containers.sh
+#!/bin/bash
+
+echo "Starting container discovery..."
+
+# Function to check if a port is open
+check_port() {
+    local host=$1
+    local port=$2
+    timeout 1 bash -c ">/dev/tcp/$host/$port" 2>/dev/null
+    return $?
+}
+
+while true; do
+    echo "Discovering containers..."
+    
+    # Get the nodejs container IP
+    CONTAINER_ID=$(docker ps --format '{{.ID}}' --filter name=my-container-nodejs)
+    
+    if [ -n "$CONTAINER_ID" ]; then
+        CONTAINER_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$CONTAINER_ID")
+        
+        if [ -n "$CONTAINER_IP" ]; then
+            echo "Found container IP: $CONTAINER_IP"
+            
+            # Check if the port is open
+            if check_port "$CONTAINER_IP" 3000; then
+                echo "Port 3000 is open on $CONTAINER_IP"
+                
+                # Generate nginx config
+                cat > /etc/nginx/conf.d/default.conf << EOL
+server {
+    listen 80;
+    server_name _;
+
+    # Health check endpoint
+    location = /health {
+        access_log off;
+        return 200 "healthy";
+        add_header Content-Type text/plain;
+    }
+
+    # Main application proxy
+    location / {
+        proxy_pass http://${CONTAINER_IP}:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+}
+EOL
+                echo "Updated nginx configuration"
+                nginx -s reload
+                echo "Reloaded nginx"
+            else
+                echo "Port 3000 is not open on $CONTAINER_IP"
+            fi
+        else
+            echo "Could not get container IP"
+        fi
+    else
+        echo "No nodejs container found"
+    fi
+    
+    sleep 10
+done
+EOF
+
+chmod +x discover_containers.sh
+
+
+
+
+
+# Build the new image
+docker build -t my_custom_nginx_image1:v5 .
+
+# Stop and remove the old container
+docker stop my_custom_nginx_container_v5
+docker rm my_custom_nginx_container_v5
+
+# Run the new container
+docker run -d \
+  --name my_custom_nginx_container_v5 \
+  --restart unless-stopped \
+  -p 80:80 \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  my_custom_nginx_image1:v5
+
+# Check the logs
+docker logs my_custom_nginx_container_v5
+
+# Check supervisor status
+docker exec my_custom_nginx_container_v5 supervisorctl status
+
+# Check discovery logs
+docker exec my_custom_nginx_container_v5 tail -f /var/log/supervisor/discovery.log
+
+
+docker logs my_custom_nginx_container_v6
+
+docker cp default.conf my_custom_nginx_image1:v5 :/etc/nginx/conf.d/default.conf
+
+docker exec -it 65abea87465a /bin/sh
+
+docker exec -it my_custom_nginx_container /bin/sh
+
+
+
+docker run -d \
+  --name my_custom_nginx_container_v5 \
+  --restart unless-stopped \
+  -p 80:80 \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -e ECS_SERVICE_NAME=ECS_service-ecs-service-node-b24edafc \
+  my_custom_nginx_image1:v5
+
+
+
+
+
+
+
+
+  !/bin/bash
+# Increase verbosity and debugging
+set -x
+
+# Set default values with environment variables
+ECS_CLUSTER="${ECS_CLUSTER:-demo-cluster-b24edafc}"
+ECS_SERVICE_NAME="${ECS_SERVICE_NAME:-ECS_service-ecs-service-node-b24edafc}"
+DISCOVERY_INTERVAL="${DISCOVERY_INTERVAL:-30}"
+CONFIG_PATH="${CONFIG_PATH:-/etc/nginx/nginx.conf}"
+TEMP_CONFIG_PATH="/etc/nginx/conf.d/upstream.conf"
+REGION="${AWS_REGION:-us-east-1}"
+
+# Function to log messages
+log() {
+    echo "[$(date +'%Y-%m-%d %H:%M:%S')] $*" >&2
+    echo "[$(date +'%Y-%m-%d %H:%M:%S')] $*" >> /var/log/discover_containers.log
+}
+
+# Function to discover and configure containers
+discover_containers() {
+    log "Starting container discovery process"
+    log "ECS Cluster: $ECS_CLUSTER"
+    log "ECS Service Name: $ECS_SERVICE_NAME"
+
+    # List tasks in the service
+    TASKS=$(aws ecs list-tasks \
+        --cluster "$ECS_CLUSTER" \
+        --service-name "$ECS_SERVICE_NAME" \
+        --region "$REGION" \
+        --query 'taskArns[]' \
+        --output text)
+
+    log "Discovered Tasks: $TASKS"
+
+    # Check if any tasks were found
+    if [ -z "$TASKS" ]; then
+        log "ERROR: No running tasks found"
+        return 1
+    fi
+
+    # Get detailed task information
+    TASK_DETAILS=$(aws ecs describe-tasks \
+        --cluster "$ECS_CLUSTER" \
+        --tasks $TASKS \
+        --region "$REGION")
+
+    # Extract container instance ARNs
+    CONTAINER_INSTANCE_ARNS=$(echo "$TASK_DETAILS" | jq -r '.tasks[].containerInstanceArn' | sort -u)
+
+    # Get EC2 instance information
+    INSTANCE_DETAILS=$(aws ecs describe-container-instances \
+        --cluster "$ECS_CLUSTER" \
+        --container-instances $CONTAINER_INSTANCE_ARNS \
+        --region "$REGION")
+
+    # Create a mapping of container instance ARN to EC2 instance ID
+    declare -A INSTANCE_MAP
+    while IFS= read -r line; do
+        ARN=$(echo "$line" | cut -f1)
+        ID=$(echo "$line" | cut -f2)
+        INSTANCE_MAP[$ARN]=$ID
+    done < <(echo "$INSTANCE_DETAILS" | jq -r '.containerInstances[] | [.containerInstanceArn, .ec2InstanceId] | @tsv')
+
+    # Get EC2 instance IPs
+    EC2_IDS=$(echo "$INSTANCE_DETAILS" | jq -r '.containerInstances[].ec2InstanceId' | sort -u)
+    EC2_DETAILS=$(aws ec2 describe-instances \
+        --instance-ids $EC2_IDS \
+        --region "$REGION")
+
+    # Create a mapping of EC2 ID to private IP
+    declare -A IP_MAP
+    while IFS= read -r line; do
+        ID=$(echo "$line" | cut -f1)
+        IP=$(echo "$line" | cut -f2)
+        IP_MAP[$ID]=$IP
+    done < <(echo "$EC2_DETAILS" | jq -r '.Reservations[].Instances[] | [.InstanceId, .PrivateIpAddress] | @tsv')
+
+    # Prepare nginx upstream configuration
+    {
+        echo "# Auto-generated upstream configuration"
+        echo "upstream backend {"
+
+        # Process each task
+        echo "$TASK_DETAILS" | jq -c '.tasks[]' | while read -r task; do
+            CONTAINER_INSTANCE_ARN=$(echo "$task" | jq -r '.containerInstanceArn')
+            EC2_ID=${INSTANCE_MAP[$CONTAINER_INSTANCE_ARN]}
+            HOST_IP=${IP_MAP[$EC2_ID]}
+
+            # Get container port mappings
+            echo "$task" | jq -c '.containers[]' | while read -r container; do
+                if echo "$container" | jq -r '.name' | grep -q "my-container-nodejs"; then
+                    HOST_PORT=$(echo "$container" | jq -r '.networkBindings[] | select(.containerPort==3000) | .hostPort')
+                    if [ -n "$HOST_IP" ] && [ -n "$HOST_PORT" ]; then
+                        log "Adding backend server: $HOST_IP:$HOST_PORT"
+                        echo "    server $HOST_IP:$HOST_PORT;"
+                    fi
+                fi
+            done
+        done
+
+        echo "}"
+
+        # Add server configuration
+        echo "server {"
+        echo "    listen 80;"
+        echo "    server_name _;"
+        echo "    location = /health {"
+        echo "        return 200 \"healthy\";"
+        echo "        add_header Content-Type text/plain;"
+        echo "    }"
+        echo "    location / {"
+        echo "        proxy_pass http://backend;"
+        echo "        proxy_set_header Host \$host;"
+        echo "        proxy_set_header X-Real-IP \$remote_addr;"
+        echo "    }"
+        echo "}"
+    } > "$TEMP_CONFIG_PATH"
+
+    # Verify file creation
+    log "Checking created config file:"
+    ls -l "$TEMP_CONFIG_PATH"
+    cat "$TEMP_CONFIG_PATH"
+
+    # Validate and reload nginx configuration
+    if nginx -t; then
+        log "Nginx configuration test PASSED"
+        nginx -s reload
+        log "Nginx configuration RELOADED"
+    else
+        log "ERROR: Nginx configuration test FAILED"
+        nginx -t  # This will print detailed error messages
+    fi
+}
+
+
+    # Trim leading/trailing whitespace
+    CONTAINERS=$(echo "$CONTAINERS" | xargs)
+
+    log "Consolidated Container IPs: $CONTAINERS"
+
+    # Check if any containers were found
+    if [ -z "$CONTAINERS" ]; then
+        log "ERROR: No container IPs found"
+        return 1
+    fi
+
+    # Ensure conf.d directory exists
+    mkdir -p /etc/nginx/conf.d
+
+    # Create upstream configuration
+    {
+        echo "# Auto-generated upstream configuration"
+        echo "upstream backend {"
+
+        # Iterate through discovered containers
+        for container_ip in $CONTAINERS; do
+            log "Adding container IP: $container_ip"
+            echo "    server $container_ip:3000;"
+        done
+
+        echo "}"
+
+        # Location block to use the upstream
+        echo "server {"
+        echo "    listen 80;"
+        echo "    server_name _;"
+        echo "    location = /health {"
+        echo "        return 200 \"healthy\";"
+        echo "        add_header Content-Type text/plain;"
+echo "    }"
+        echo "    location / {"
+        echo "        proxy_pass http://backend;"
+        echo "        proxy_set_header Host \$host;"
+        echo "        proxy_set_header X-Real-IP \$remote_addr;"
+        echo "    }"
+        echo "}"
+    } > "$TEMP_CONFIG_PATH"
+
+    # Verify file creation
+    log "Checking created config file:"
+    ls -l "$TEMP_CONFIG_PATH"
+    cat "$TEMP_CONFIG_PATH"
+
+    # Validate and reload nginx configuration
+    if nginx -t; then
+        log "Nginx configuration test PASSED"
+        nginx -s reload
+        log "Nginx configuration RELOADED"
+    else
+        log "ERROR: Nginx configuration test FAILED"
+        nginx -t  # This will print detailed error messages
+    fi
+}
+
+# Immediate first run
+discover_containers
+
+# Main discovery loop
+while true; do
+    log "Sleeping for $DISCOVERY_INTERVAL seconds"
+    sleep "$DISCOVERY_INTERVAL"
+    discover_containers
+done
+
+
+docker exec my_custom_nginx_container_v5 tail -f /var/log/discover_containers.log
+
+!!!!!!!!
+!!!!!
+!!
+||||||||||||||||||||
+
+aws ecs describe-tasks \
+    --cluster demo-cluster-b24edafc \
+    --tasks arn:aws:ecs:us-east-1:010575877879:task/demo-cluster-b24edafc/043203945fd0467aaa9b8dbd250bb21f arn:aws:ecs:us-east-1:010575877879:task/demo-cluster-b24edafc/f33a2ae543c64391b08cb7aaf1623aba \
+    --region us-east-1 \
+    --query 'tasks[].containers[].networkBindings[]'
+
+
+
+
+
+
+
+
+    )*)(*)(*(*&(*&^*&^%&^%$$%#%$##@$#@$#@$@!#@!#@!$@$#%$^%$&%&%&)))
+COMMAND!!!!!!!
+
+docker exec my_custom_nginx_container_v5 aws ecs list-tasks \
+>   --cluster demo-cluster-b24edafc \
+>   --service-name ECS_service-ecs-service-node-b24edafc \
+>   --region us-east-1
+{
+    "taskArns": [
+        "arn:aws:ecs:us-east-1:010575877879:task/demo-cluster-b24edafc/043203945fd0467aaa9b8dbd250bb21f",
+        "arn:aws:ecs:us-east-1:010575877879:task/demo-cluster-b24edafc/f33a2ae543c64391b08cb7aaf1623aba"
+    ]
+}
+[ec2-user@ip-10-0-3-193 init]$
+
+    [ec2-user@ip-10-0-3-193 init]$ docker run -d \>   --name my_custom_nginx_container_v5 \
+>   --restart unless-stopped \
+>   -p 80:80 \
+>   -v /var/run/docker.sock:/var/run/docker.sock \
+>   -e NODEJS_SERVICE_NAME="ECS_service-ecs-service-node-b24edafc" \
+>   -e AWS_DEFAULT_REGION="us-east-1" \
+>   -e ECS_CLUSTER="demo-cluster-b24edafc" \
+>   my_custom_nginx_image1:v5
+33d8f888c2dca6f05d1ad7d51828b8b24a2ef86daafc52f6edac092e9e2ba34e
+[ec2-user@ip-10-0-3-193 init]$ docker logs my_custom_nginx_container_v5
+2024-12-16 14:44:06,974 INFO Set uid to user 0 succeeded
+2024-12-16 14:44:06,978 INFO RPC interface 'supervisor' initialized
+2024-12-16 14:44:06,978 CRIT Server 'unix_http_server' running without any HTTP authentication checking
+2024-12-16 14:44:06,978 INFO supervisord started with pid 1
+2024-12-16 14:44:07,981 INFO spawned: 'discovery' with pid 7
+2024-12-16 14:44:07,983 INFO spawned: 'nginx' with pid 8
+2024-12-16 14:44:07,997 INFO exited: discovery (exit status 2; not expected)
+2024-12-16 14:44:09,000 INFO spawned: 'discovery' with pid 10
+2024-12-16 14:44:09,000 INFO success: nginx entered RUNNING state, process has stayed up for > than 1 seconds (startsecs)
+2024-12-16 14:44:10,009 INFO success: discovery entered RUNNING state, process has stayed up for > than 1 seconds (startsecs)
+2024-12-16 14:44:10,009 INFO exited: discovery (exit status 2; not expected)
+2024-12-16 14:44:11,010 INFO spawned: 'discovery' with pid 11
+2024-12-16 14:44:12,018 INFO success: discovery entered RUNNING state, process has stayed up for > than 1 seconds (startsecs)
+2024-12-16 14:44:12,019 INFO exited: discovery (exit status 2; not expected)
+2024-12-16 14:44:13,021 INFO spawned: 'discovery' with pid 12
+2024-12-16 14:44:14,029 INFO success: discovery entered RUNNING state, process has stayed up for > than 1 seconds (startsecs)
+2024-12-16 14:44:14,029 INFO exited: discovery (exit status 2; not expected)
+2024-12-16 14:44:15,031 INFO spawned: 'discovery' with pid 13
+[ec2-user@ip-10-0-3-193 init]$ docker exec my_custom_nginx_container_v5 tail -f /var/log/discover_containers.log
+tail: can't open '/var/log/discover_containers.log': No such file or directory
+tail: no files
+[ec2-user@ip-10-0-3-193 init]$
+[ec2-user@ip-10-0-3-193 init]$ docker exec -it my_custom_nginx_container_v5 /bin/sh
+/ # docker exec my_custom_nginx_container_v5 supervisorctl status
+discovery                        BACKOFF   Exited too quickly (process log may have details)
+nginx                            RUNNING   pid 8, uptime 0:00:38
+/ #
+
+docker build -t my_custom_nginx_image1:v5 .
+
+
+docker stop my_custom_nginx_container_v5
+docker rm my_custom_nginx_container_v5
+
+
+
+docker run -d \
+  --name my_custom_nginx_container_v5 \
+  --restart unless-stopped \
+  -p 80:80 \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -e NODEJS_SERVICE_NAME="ECS_service-ecs-service-node-17206e0d" \
+  -e AWS_DEFAULT_REGION="us-east-1" \
+  -e ECS_CLUSTER="demo-cluster-17206e0d" \
+  -e AWS_ACCESS_KEY_ID="AKIAQE5S7C332HWKLRGS" \
+  -e AWS_SECRET_ACCESS_KEY="REMOVED_SECRET" \
+  my_custom_nginx_image1:v5
+
+
+
+docker run -d \
+  --name awsemc1980/my_custom_nginx_image1 \
+  --restart unless-stopped \
+  -p 80:80 \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -e NODEJS_SERVICE_NAME="ECS_service-ecs-service-node-de730a75 " \
+  -e AWS_DEFAULT_REGION="us-east-1" \
+  -e ECS_CLUSTER="demo-cluster-de730a75" \
+  -e AWS_ACCESS_KEY_ID="AKIAQE5S7C332HWKLRGS" \
+  -e AWS_SECRET_ACCESS_KEY="REMOVED_SECRET" \
+  awsemc1980/my_custom_nginx_image1
+
+docker run -d \
+  --name my_custom_nginx_container \
+  --restart unless-stopped \
+  -p 80:80 \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -e NODEJS_SERVICE_NAME="ECS_service-ecs-service-node-e70817f2" \
+  -e AWS_DEFAULT_REGION="us-east-1" \
+  -e ECS_CLUSTER="demo-cluster-e70817f2" \
+  -e AWS_ACCESS_KEY_ID="AKIAQE5S7C332HWKLRGS" \
+  -e AWS_SECRET_ACCESS_KEY="REMOVED_SECRET" \
+  awsemc1980/my_custom_nginx_image1:v5
+c
+
+
+  *******
+  ************************%%%%%%>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+  ec2-user@ip-10-0-3-193 init]$ docker exec my_custom_nginx_container_v5 cat /etc/nginx/conf.d/upstream.conf
+# Auto-generated upstream configuration
+upstream backend {
+}
+server {
+    listen 80;
+    server_name _;
+    location = /health {
+        return 200 "healthy";
+        add_header Content-Type text/plain;
+    }
+    location / {
+        proxy_pass http://backend;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+}
+[ec2-user@ip-10-0-3-193 init]$
+
+
+will listen on port 80 and be exposed to the internet
+and which will proxy requests to the node servers based on url prefix:
+`
+http://${publicDnsOfInstance}/${service_identity }
+should strip identity url prefix and
+proxy request to the service with provided identity. The proxy should return 404 if
+service_identity identity does not exist.
+
+
+
+
+docker exec awsemc1980/my_custom_nginx_image1:v5 cat /etc/nginx/conf.d/upstream.conf
+
+docker exec my_custom_nginx_container cat /etc/nginx/conf.d/
+
+docker exec my_custom_nginx_container find / -type f -name "*.log" 2>/dev/null
+
+
+ec2-user@ip-10-0-2-138 ~]$ docker exec my_custom_nginx_container find / -type f -name "*.log" 2>/dev/null
+/var/log/supervisor/supervisord.log
+/var/log/supervisor/discovery.log
+/var/log/supervisor/nginx.log
+/var/log/discover_containers.log
+
+docker exec my_custom_nginx_container tail -f /var/log/discover_containers.log
+
+
+docker exec my_custom_nginx_container tail -f /var/log/supervisor/supervisord.log
+
+docker exec my_custom_nginx_container tail -f /var/log/supervisor/discovery.log
+
+docker exec my_custom_nginx_container tail -f /var/log/supervisor/nginx.log
+
+docker exec my_custom_nginx_container tail -f /var/log/discover_containers.log
+
+
+
+
+
+Steps to Resolve the Issue
+Verify Upstream Node.js Containers: Check that the Node.js service containers are running:
+
+bash
+Copy code
+docker ps
+If the containers aren't running, restart the ECS service or relevant task.
+
+Test the Upstream Container's IP: Instead of using the hostname ECS_service-ecs-service-node-2a68d631, use the container's IP directly to test:
+
+bash
+Copy code
+docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' <nodejs_container_name>
+Then, test connectivity to port 3000 using:
+
+bash
+Copy code
+docker exec -it my_custom_nginx_container curl http://<NodeJS_Container_IP>:3000
+Configure Proper DNS Resolution: If using ECS or Docker networking:
+
+Ensure all containers are in the same Docker network or ECS service discovery namespace.
+Use a service discovery mechanism like AWS Cloud Map or ECS internal DNS names.
+Update the NGINX configuration to point to the correct upstream DNS name or IP:
+
+Example:
+nginx
+Copy code
+upstream backend {
+    server 10.0.1.5:3000; # Replace with correct container IP
+}
+Check the conf.d Configuration: Since NGINX includes configurations in /etc/nginx/conf.d/*.conf, inspect those files for the upstream configuration:
+
+bash
+Copy code
+docker exec -it my_custom_nginx_container cat /etc/nginx/conf.d/<your_conf_file>.conf
+Restart NGINX: After updating the upstream configuration, reload NGINX:
+
+bash
+Copy code
+docker exec -it my_custom_nginx_container nginx -s reload
+Example Correct NGINX Upstream Configuration
+If using ECS with IP-based tasks, update your NGINX configuration:
+
+nginx
+Copy code
+http {
+    upstream node_backend {
+        server 10.0.1.10:3000;  # Replace with actual IP of Node.js service
+        server 10.0.1.11:3000;  # Add additional servers if needed
+    }
+
+    server {
+        listen 80;
+
+        location / {
+            proxy_pass http://node_backend;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+    }
+}
+Summary of Actions:
+Verify Node.js containers are running and discoverable.
+Test connectivity using container IPs.
+Update NGINX to use correct IPs or proper DNS resolution.
+Restart NGINX to apply changes.
+Let me know if you need further guidance!
+
+
+
+
+
+
+
+
+You’ve hit the Free plan limit for GPT-4o.
+Respons

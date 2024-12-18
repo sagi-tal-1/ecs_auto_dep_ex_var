@@ -21,8 +21,8 @@ output "service_status" {
 }
 
 output "service_url" {
-  description = "URL of the service (ALB DNS)"
-  value       = var.alb_dns_name
+  value       = "http://${var.alb_dns_name}:${var.nginx_port}"
+  description = "URL of the ECS service accessible via ALB"
 }
 
 output "container_name" {

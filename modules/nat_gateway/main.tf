@@ -1,3 +1,4 @@
+#moduls/nat_gateway/main.tf
 resource "aws_eip" "nat" {
   domain = "vpc"
   tags = {

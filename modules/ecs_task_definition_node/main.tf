@@ -1,20 +1,14 @@
 # modules/
 #moduls/ecs_task_definition_node/main.tf
-
-
 resource "aws_ecs_task_definition" "app" {
   family                   = var.family
   requires_compatibilities = ["EC2"]
-  network_mode             = "awsvpc"
+  network_mode             = "bridge"
   cpu                      = var.cpu
   memory                   = var.memory
   execution_role_arn       = var.execution_role_arn
   task_role_arn            = var.task_role_arn
   
-
-
-
-
   container_definitions = jsonencode([
     {
       name      = var.container_name
@@ -34,7 +28,7 @@ resource "aws_ecs_task_definition" "app" {
         {
           name  = "SERVICE_IDENTITY"
           value = var.container_name
- # Unique identifier
+                 # Unique identifier
         },
         {
           name  = "PORT"
@@ -43,8 +37,16 @@ resource "aws_ecs_task_definition" "app" {
         {
           name  = "TASK_INDEX"
           value = var.container_name
-        }
-      ]
+        },
+        {
+      "name": "SERVICE_DISCOVERY_NAME",
+      "value": "tasks.nodejs-service"  // Adjust this to match your service discovery name
+    },
+    {
+      "name": "DISCOVERY_INTERVAL",
+      "value": "30"
+    }
+    
 
       dockerLabels = {
         "app.service.identity" = var.container_name

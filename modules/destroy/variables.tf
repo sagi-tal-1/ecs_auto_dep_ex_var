@@ -17,3 +17,8 @@ variable "task_family" {
   description = "Family name of the task definition"
   type        = string
 }
+variable "service_name_nodes" {
+  description = "Name of the ECS service for nodes"
+  type        = string
+  default     = null
+}

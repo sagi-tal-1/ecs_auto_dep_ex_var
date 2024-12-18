@@ -1,0 +1,18 @@
+=== ECS Deployment Insights ===
+Timestamp: 20241215131755
+Cluster: demo-cluster-b24edafc
+Service: ECS_service-ecs-Nservice-b24edafc
+Log File: ./ecs_deployment_logs/ecs_deployment_20241215131755.log
+===============================
+
+--- Service Overview ---
+null
+
+--- Tasks in Service ---
+
+--- Detailed Task Descriptions ---
+
+--- Current Task Definition ---
+
+--- Deployment Details ---
+null

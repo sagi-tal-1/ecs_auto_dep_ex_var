@@ -1,0 +1,14 @@
+boto3
+pytest
+
+
+
+docker run -d \
+    -v /path/to/local/nginx/config:/etc/nginx \
+    -e TEST_MODE=true \
+    -e CREDENTIAL_CLUSTER_NAME=demo-cluster-9b8f74cf \
+    -e CREDENTIAL_SERVICE_NAME=demo-ecs-Nservice-9b8f74cf \
+    -e QUERY_CLUSTER_NAME=demo-cluster-9b8f74cf \
+    -e QUERY_SERVICE_NAME=ECS_service-ecs-service-node-9b8f74cf \
+    -e AWS_REGION=us-west-1 \
+    init-nginx-config

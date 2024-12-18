@@ -16,19 +16,19 @@ variable "alb_security_group_id" {
   type        = string
 }
 
-variable "nginx_port" {
-  description = "Port number for Nginx container"
-  type        = number
-}
+# variable "nginx_port" {
+#   description = "Port number for Nginx container"
+#   type        = number
+# }
 
 # variable "node_port" {
 #   description = "Port number for Node.js container"
 #   type        = number
 # }
 
-variable "nat_gateway_cidrs" {
-  description = "CIDR blocks of NAT Gateways to allow inbound traffic from"
-  type        = list(string)
-  default     = []
-}
+# variable "nat_gateway_cidrs" {
+#   description = "CIDR blocks of NAT Gateways to allow inbound traffic from"
+#   type        = list(string)
+#   default     = []
+# }
 

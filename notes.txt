@@ -1,5 +1,305 @@
+resource "null_resource" "nginx_config_generator" {
+  triggers = {
+    ecs_service_id = aws_ecs_service.nodejs_service.id
+  }
+
+  provisioner "local-exec" {
+    command = <<-EOT
+      #!/bin/bash
+      set -e
+
+      # Number of expected tasks (passed as an argument)
+      EXPECTED_TASKS=${var.expected_nodejs_tasks}
+      CLUSTER_NAME=${var.cluster_name}
+      SERVICE_NAME=${aws_ecs_service.nodejs_service.name}
+      MAX_WAIT_TIME=300  # 5 minutes total wait time
+      WAIT_INTERVAL=10   # Check every 10 seconds
+
+      # Logging function
+      log_status() {
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
+      }
+
+      # Create initial placeholder nginx configuration
+      mkdir -p ${path.module}/config
+      cat > ${path.module}/config/nginx.conf <<EOF
+http {
+    server {
+        listen 80;
+        
+        location / {
+            return 503 'Services are initializing or partially unavailable. Please try again later.';
+            add_header Content-Type text/plain;
+        }
+
+        location /health {
+            return 200 'Services status: Initializing';
+            add_header Content-Type text/plain;
+        }
+    }
+}
+EOF
+
+      # Function to check task readiness
+      wait_for_tasks() {
+        local start_time=$(date +%s)
+        local current_time=$start_time
+        local available_tasks=0
+        local valid_tasks_info=""
+
+        log_status "Waiting for tasks. Expected: $EXPECTED_TASKS"
+
+        while [ $((current_time - start_time)) -lt $MAX_WAIT_TIME ]; do
+          # List tasks for the service
+          TASKS=$(aws ecs list-tasks \
+            --cluster $CLUSTER_NAME \
+            --service-name $SERVICE_NAME \
+            --desired-status RUNNING \
+            --query 'taskArns[]' \
+            --output text)
+
+          # Count running tasks
+          available_tasks=$(echo "$TASKS" | wc -w)
+
+          log_status "Current running tasks: $available_tasks"
+
+          # If at least one task is running, start collecting task info
+          if [ "$available_tasks" -gt 0 ]; then
+            # Get detailed task information
+            TASK_INFO=$(aws ecs describe-tasks \
+              --cluster $CLUSTER_NAME \
+              --tasks $TASKS \
+              --query 'tasks[*].[taskArn,containerInstanceArn,containers[*].networkBindings[*].[hostPort]]' \
+              --output json)
+
+            # Get container instance information to map to EC2 instances
+            CONTAINER_INSTANCES=$(echo "$TASK_INFO" | jq -r '.[].[] | select(contains("container-instance"))' | tr '\n' ' ')
+            
+            EC2_INFO=$(aws ecs describe-container-instances \
+              --cluster $CLUSTER_NAME \
+              --container-instances $CONTAINER_INSTANCES \
+              --query 'containerInstances[*].[ec2InstanceId,containerInstanceArn]' \
+              --output json)
+
+            # Get EC2 private IPs
+            INSTANCE_IDS=$(echo "$EC2_INFO" | jq -r '.[].[] | select(contains("i-"))' | tr '\n' ' ')
+            
+            EC2_PRIVATE_IPS=$(aws ec2 describe-instances \
+              --instance-ids $INSTANCE_IDS \
+              --query 'Reservations[*].Instances[*].[PrivateIpAddress,InstanceId]' \
+              --output json)
+
+            # Validate and collect working tasks
+            valid_tasks_info=""
+            working_tasks=0
+
+            echo "$TASK_INFO" | jq -c '.[]' | while read -r task; do
+              CONTAINER_INSTANCE=$(echo "$task" | jq -r '.[1]')
+              HOST_PORT=$(echo "$task" | jq -r '.[2][0][0][0]')
+              
+              # Get EC2 instance private IP
+              EC2_ID=$(echo "$EC2_INFO" | jq -r --arg ci "$CONTAINER_INSTANCE" '.[] | select(.[1] == $ci) | .[0]')
+              PRIVATE_IP=$(echo "$EC2_PRIVATE_IPS" | jq -r --arg id "$EC2_ID" '.[][].[] | select(.[1] == $id) | .[0]')
+              
+              # Validate IP and port
+              if [[ $PRIVATE_IP =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] && [ "$HOST_PORT" -gt 0 ] 2>/dev/null; then
+                # Test connection
+                if timeout 5 bash -c "echo > /dev/tcp/$PRIVATE_IP/$HOST_PORT" 2>/dev/null; then
+                  valid_tasks_info+="        server ${PRIVATE_IP}:${HOST_PORT}; # Task: $(echo $task | jq -r '.[0]')\n"
+                  ((working_tasks++))
+                  log_status "Successfully validated connection to ${PRIVATE_IP}:${HOST_PORT}"
+                fi
+              fi
+            done
+
+            # If we have working tasks, generate config
+            if [ "$working_tasks" -gt 0 ]; then
+              # Generate final nginx configuration
+              cat > ${path.module}/config/nginx.conf <<EOF
+http {
+    include       /etc/nginx/mime.types;
+    default_type  application/octet-stream;
+
+    gzip on;
+    gzip_vary on;
+    gzip_proxied any;
+    gzip_comp_level 6;
+    gzip_types text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss text/javascript;
+
+    upstream backend_servers {
+$valid_tasks_info    }
+    
+    server {
+        listen 80;
+        
+        location /health {
+            return 200 'Services status: Running ($working_tasks/$EXPECTED_TASKS tasks available)';
+            add_header Content-Type text/plain;
+        }
+
+        location / {
+            proxy_pass http://backend_servers;
+            proxy_set_header Host \$host;
+            proxy_set_header X-Real-IP \$remote_addr;
+            proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+            proxy_connect_timeout 5s;
+            proxy_send_timeout 60s;
+            proxy_read_timeout 60s;
+            proxy_buffering on;
+            proxy_buffer_size 8k;
+            proxy_buffers 8 8k;
+            proxy_busy_buffers_size 16k;
+        }
+    }
+}
+EOF
+
+              # Validate nginx configuration
+              if docker run --rm -v $(pwd)/config/nginx.conf:/etc/nginx/nginx.conf:ro nginx:alpine nginx -t; then
+                log_status "Nginx configuration generated successfully with $working_tasks working tasks"
+                return 0
+              fi
+            fi
+          fi
+
+          # If we haven't returned, continue waiting
+          sleep $WAIT_INTERVAL
+          current_time=$(date +%s)
+        done
+
+        # If we exit the loop, we've timed out
+        if [ "$available_tasks" -eq 0 ]; then
+          log_status "No tasks found after waiting. Services are completely unavailable."
+          
+          # Update nginx to show complete unavailability
+          cat > ${path.module}/config/nginx.conf <<EOF
+http {
+    server {
+        listen 80;
+        
+        location / {
+            return 503 'All backend services are currently unavailable. Please contact support.';
+            add_header Content-Type text/plain;
+        }
+
+        location /health {
+            return 500 'Services status: UNAVAILABLE (0/$EXPECTED_TASKS tasks running)';
+            add_header Content-Type text/plain;
+        }
+    }
+}
+EOF
+          return 1
+        fi
+
+        log_status "Could not initialize all tasks within the time limit"
+        return 1
+      }
+
+      # Run the task waiting and configuration generation
+      if ! wait_for_tasks; then
+        echo "Failed to initialize tasks"
+        exit 1
+      fi
+
+      echo "Deployment configuration completed"
+    EOT
+
+    interpreter = ["/bin/bash", "-c"]
+  }
+
+  depends_on = [
+    aws_ecs_service.nodejs_service
+  ]
+}
+# Modify the task definition to use the generated config
+resource "aws_ecs_task_definition" "nginx_proxy" {
+  family                   = "nginx-proxy"
+  requires_compatibilities = ["EC2"]
+  network_mode             = "bridge"
+  
+  container_definitions = jsonencode([
+    {
+      name  = "nginx"
+      image = "nginx:alpine"
+      portMappings = [
+        {
+          containerPort = 80
+          protocol     = "tcp"
+        }
+      ]
+      mountPoints = [
+        {
+          sourceVolume  = "nginx-config"
+          containerPath = "/etc/nginx/nginx.conf"
+          readOnly     = true
+        }
+      ]
+    }
+  ])
+
+  volume {
+    name = "nginx-config"
+    host_path = "${path.module}/config/nginx.conf"
+  }
+
+  depends_on = [
+    null_resource.nginx_config_generator
+  ]
+}
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+"${var.name_prefix}-ecs-Nservice-${random_id.unique.hex}"
+
+"${var.name_prefix}-ecs-Nservice-${random_id.unique.hex}"
+
+Hierarchy (from top to bottom):
+1. Internet Gateway
+2. Application Load Balancer (ALB)
+3. Auto Scaling Group
+4. EC2 Instances (managed by Capacity Provider)
+
+Incoming Traffic Flow:
+1. Internet Gateway: Entry point for traffic from the internet into your VPC.
+2. Application Load Balancer: Receives traffic from the Internet Gateway and distributes it across multiple targets.
+3. Auto Scaling Group: Manages a fleet of EC2 instances based on defined policies.
+4. EC2 Instances: Host your application or service, managed by the Capacity Provider.
+
+Outgoing Traffic Flow:
+1. EC2 Instances: Generate outbound traffic from your application.
+2. Internet Gateway: Facilitates outbound traffic from your VPC to the internet.
+
+Steps to set up this architecture:
+
+1. Create a VPC with public and private subnets.
+2. Attach an Internet Gateway to your VPC.
+3. Configure route tables for traffic between subnets and the Internet Gateway.
+4. Create an Application Load Balancer in public subnets.
+5. Set up an Auto Scaling group with EC2 instances in private subnets.
+6. Configure the Capacity Provider and associate it with the Auto Scaling group.
+7. Create target groups and listeners for your ALB.
+8. Configure security groups for EC2 instances and the ALB.
+
+Key considerations:
+
+• Use managed scaling with ECS capacity providers for efficient resource utilization.
+• Implement proper security measures, such as restricting inbound traffic to the ALB and outbound traffic from EC2 instances.
+• Consider using AWS Firewall Manager for centralized security rule management.
+• Implement encryption in transit for sensitive data.
+• Use multiple layers of security controls (defense-in-depth) for both inbound and outbound traffic.
 
 
 

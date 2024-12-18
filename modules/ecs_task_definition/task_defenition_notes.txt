@@ -1,3 +1,466 @@
+sudo CLUSTER_NAME=demo-cluster-847f8164 \
+SERVICE_NAME=ECS_service-ecs-service-node-847f8164 \
+AWS_DEFAULT_REGION=us-east-1 \
+python3 init-script.py
+
+
+
+
+import boto3
+import json
+import os
+import time
+import sys
+import logging
+import traceback
+
+# Configure comprehensive logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('/var/log/ecs-nginx-discovery.log'),
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+logger = logging.getLogger(__name__)
+
+def validate_environment_variables():
+    """
+    Validate and log the status of required environment variables.
+    
+    Returns:
+    dict: A dictionary containing validated environment variables
+    """
+    env_vars = {
+        'CLUSTER_NAME': os.environ.get('CLUSTER_NAME'),
+        'SERVICE_NAME': os.environ.get('SERVICE_NAME'),
+        'AWS_DEFAULT_REGION': os.environ.get('AWS_DEFAULT_REGION', 'us-east-1')
+    }
+    
+    # Check for missing environment variables
+    missing_vars = [var for var, value in env_vars.items() if not value]
+    
+    if missing_vars:
+        logger.error(f"Missing required environment variables: {', '.join(missing_vars)}")
+        raise ValueError(f"Missing environment variables: {', '.join(missing_vars)}")
+    
+    # Log environment variables for debugging
+    for var, value in env_vars.items():
+        logger.info(f"{var}: {value}")
+    
+    return env_vars
+
+def get_aws_credentials(region='us-east-1'):
+    """
+    Attempt to get AWS credentials with comprehensive error handling.
+    
+    Args:
+    region (str): AWS region to use, defaults to 'us-east-1'
+    
+    Returns:
+    boto3.Session: AWS session with configured credentials
+    """
+    try:
+        # Check for explicit credentials in environment variables
+        if (os.environ.get('AWS_ACCESS_KEY_ID') and 
+            os.environ.get('AWS_SECRET_ACCESS_KEY')):
+            logger.info("Using explicitly provided AWS credentials")
+            return boto3.Session(
+                aws_access_key_id=os.environ.get('AWS_ACCESS_KEY_ID'),
+                aws_secret_access_key=os.environ.get('AWS_SECRET_ACCESS_KEY'),
+                region_name=region
+            )
+        
+        # Use default credential chain
+        logger.info("Using default AWS credential chain")
+        session = boto3.Session(region_name=region)
+        
+        # Verify credentials by making a simple API call
+        sts_client = session.client('sts')
+        sts_client.get_caller_identity()
+        
+        return session
+    
+    except Exception as e:
+        logger.error(f"Failed to obtain AWS credentials: {e}")
+        logger.error(traceback.format_exc())
+        raise
+
+def get_service_tasks(session, cluster_name, service_name):
+    """
+    Retrieve detailed information about tasks in an ECS service.
+    
+    Args:
+    session (boto3.Session): AWS session
+    cluster_name (str): Name of the ECS cluster
+    service_name (str): Name of the ECS service
+    
+    Returns:
+    list: List of server addresses (IP:Port)
+    """
+    try:
+        # Create AWS service clients
+        ecs = session.client('ecs')
+        ec2 = session.client('ec2')
+        
+        # List tasks for the specified service
+        tasks_response = ecs.list_tasks(
+            cluster=cluster_name,
+            serviceName=service_name
+        )
+        tasks = tasks_response.get('taskArns', [])
+        
+        logger.info(f"Found {len(tasks)} tasks in service {service_name}")
+        if not tasks:
+            return []
+        
+        # Describe tasks to get container instance details
+        task_details = ecs.describe_tasks(
+            cluster=cluster_name,
+            tasks=tasks
+        )['tasks']
+        
+        # Get unique container instance ARNs
+        container_instance_arns = list(set(
+            task['containerInstanceArn'] 
+            for task in task_details 
+            if 'containerInstanceArn' in task
+        ))
+        
+        if not container_instance_arns:
+            logger.warning("No container instance ARNs found")
+            return []
+        
+        # Get container instance details
+        container_instances = ecs.describe_container_instances(
+            cluster=cluster_name,
+            containerInstances=container_instance_arns
+        )['containerInstances']
+        
+        # Map container instance ARNs to EC2 instance IDs
+        instance_mapping = {
+            ci['containerInstanceArn']: ci['ec2InstanceId']
+            for ci in container_instances
+        }
+        
+        # Get EC2 instance details
+        ec2_instances = ec2.describe_instances(
+            InstanceIds=list(instance_mapping.values())
+        )['Reservations']
+        
+        # Create IP mapping for EC2 instances
+        ip_mapping = {
+            instance['InstanceId']: instance['Instances'][0]['PrivateIpAddress']
+            for reservation in ec2_instances
+            for instance in reservation['Instances']
+        }
+        
+        # Extract host ports and IPs
+        servers = []
+        for task in task_details:
+            if 'containerInstanceArn' not in task:
+                continue
+            
+            instance_id = instance_mapping[task['containerInstanceArn']]
+            ip = ip_mapping.get(instance_id)
+            
+            if not ip:
+                logger.warning(f"No IP found for instance {instance_id}")
+                continue
+            
+            for container in task['containers']:
+                for network_binding in container.get('networkBindings', []):
+                    if network_binding.get('hostPort'):
+                        server_address = f"{ip}:{network_binding['hostPort']}"
+                        servers.append(server_address)
+                        logger.info(f"Found server: {server_address}")
+        
+        return servers
+    
+    except Exception as e:
+        logger.error(f"Error retrieving service tasks: {e}")
+        logger.error(traceback.format_exc())
+        return []
+
+def generate_nginx_config(servers):
+    """
+    Generate Nginx configuration for load balancing.
+    
+    Args:
+    servers (list): List of server addresses
+    
+    Returns:
+    str: Nginx configuration content
+    """
+    if not servers:
+        logger.warning("No servers found to generate Nginx configuration")
+        return None
+    
+    config = "events {\n    worker_connections 1024;\n}\n\nhttp {\n"
+    config += "    upstream backend_servers {\n"
+    
+    for server in servers:
+        config += f"        server {server};\n"
+    
+    config += """    }
+    
+    server {
+        listen 80;
+        
+        location / {
+            proxy_pass http://backend_servers;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+    }
+}"""
+    
+    return config
+
+def write_nginx_config(config):
+    """
+    Write Nginx configuration to file.
+    
+    Args:
+    config (str): Nginx configuration content
+    """
+    try:
+        os.makedirs('/nginx-config', exist_ok=True)
+        config_path = '/nginx-config/nginx.conf'
+        
+        with open(config_path, 'w') as f:
+            f.write(config)
+        
+        logger.info(f"Nginx configuration written to {config_path}")
+    except Exception as e:
+        logger.error(f"Failed to write Nginx configuration: {e}")
+        logger.error(traceback.format_exc())
+
+def main():
+    """
+    Main function to discover ECS tasks and generate Nginx configuration.
+    """
+    max_attempts = 30
+    retry_delay = 10  # seconds between attempts
+    
+    try:
+        # Validate environment variables
+        env_vars = validate_environment_variables()
+        
+        # Get AWS session
+        session = get_aws_credentials(env_vars['AWS_DEFAULT_REGION'])
+        
+        # Attempt to discover and configure servers
+        for attempt in range(1, max_attempts + 1):
+            logger.info(f"Discovery attempt {attempt} of {max_attempts}")
+            
+            servers = get_service_tasks(
+                session, 
+                env_vars['CLUSTER_NAME'], 
+                env_vars['SERVICE_NAME']
+            )
+            
+            if servers:
+                # Generate and write Nginx configuration
+                nginx_config = generate_nginx_config(servers)
+                write_nginx_config(nginx_config)
+                logger.info("Successfully completed server discovery")
+                break
+            
+            if attempt < max_attempts:
+                logger.info(f"No servers found. Retrying in {retry_delay} seconds...")
+                time.sleep(retry_delay)
+        
+        else:
+            logger.error("Failed to find servers after maximum attempts")
+            sys.exit(1)
+    
+    except Exception as e:
+        logger.error(f"Fatal error in main function: {e}")
+        logger.error(traceback.format_exc())
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+root@676aef52d534:/app# cat init-script.py 
+import boto3
+import json
+import os
+import time
+
+def get_service_tasks():
+    ecs = boto3.client('ecs')
+    cluster_name = os.environ['CLUSTER_NAME']
+    service_name = os.environ['SERVICE_NAME']
+    
+    try:
+        # Get tasks for the service
+        tasks = ecs.list_tasks(
+            cluster=cluster_name,
+            serviceName=service_name
+        )['taskArns']
+        
+        if not tasks:
+            return []
+            
+        # Get detailed task information
+        task_details = ecs.describe_tasks(
+            cluster=cluster_name,
+            tasks=tasks
+        )['tasks']
+        
+        # Get container instance ARNs
+        container_instance_arns = list(set([
+            task['containerInstanceArn'] 
+            for task in task_details 
+            if 'containerInstanceArn' in task
+        ]))
+        
+        if not container_instance_arns:
+            return []
+            
+        # Get container instance details
+        container_instances = ecs.describe_container_instances(
+            cluster=cluster_name,
+            containerInstances=container_instance_arns
+        )['containerInstances']
+        
+        # Create mapping of container instance ARN to EC2 instance ID
+        instance_mapping = {
+            ci['containerInstanceArn']: ci['ec2InstanceId']
+            for ci in container_instances
+        }
+        
+        # Get EC2 instance details
+        ec2 = boto3.client('ec2')
+        ec2_instances = ec2.describe_instances(
+            InstanceIds=[instance_mapping[arn] for arn in instance_mapping]
+        )['Reservations']
+        
+        # Create mapping of EC2 instance ID to private IP
+        ip_mapping = {}
+        for reservation in ec2_instances:
+            for instance in reservation['Instances']:
+                ip_mapping[instance['InstanceId']] = instance['PrivateIpAddress']
+                
+        # Extract host ports and IPs
+        servers = []
+        for task in task_details:
+            if 'containerInstanceArn' in task:
+                instance_id = instance_mapping[task['containerInstanceArn']]
+                ip = ip_mapping[instance_id]
+                
+                for container in task['containers']:
+                    for network_binding in container.get('networkBindings', []):
+                        if network_binding['hostPort']:
+                            servers.append(f"{ip}:{network_binding['hostPort']}")
+                            
+        return servers
+        
+    except Exception as e:
+        print(f"Error getting task information: {str(e)}")
+        return []
+
+def generate_nginx_config(servers):
+    config = """
+events {
+    worker_connections 1024;
+}
+
+http {
+    upstream backend_servers {
+"""
+    
+    for server in servers:
+        config += f"        server {server};\n"
+    
+    config += """    }
+    
+    server {
+        listen 80;
+        
+        location / {
+            proxy_pass http://backend_servers;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+    }
+}
+"""
+    return config
+
+def main():
+    max_attempts = 30
+    attempt = 0
+    
+    while attempt < max_attempts:
+        print(f"Attempt {attempt + 1} of {max_attempts}")
+        servers = get_service_tasks()
+        
+        if servers:
+            print(f"Found servers: {servers}")
+            nginx_config = generate_nginx_config(servers)
+            
+            with open('/nginx-config/nginx.conf', 'w') as f:
+                f.write(nginx_config)
+            print("Successfully wrote nginx configuration")
+            break
+            
+        attempt += 1
+        if attempt < max_attempts:
+            print("No servers found, waiting 10 seconds...")
+            time.sleep(10)
+    
+    if attempt >= max_attempts:
+        print("Failed to find any servers after maximum attempts")
+        exit(1)
+
+if __name__ == "__main__":
+    main()
+
+root@676aef52d534:/app# 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 rom all this information, I can see several critical issues:
 
 The service deployment has failed with the message "tasks failed to start"

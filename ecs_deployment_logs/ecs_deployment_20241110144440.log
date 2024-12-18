@@ -1,8 +1,0 @@
-=== ECS Deployment Insights ===
-Timestamp: 20241110144440
-Cluster: demo-cluster-c9303309
-Service: demo-ecs-service-c9303309
-Log File: ./ecs_deployment_logs/ecs_deployment_20241110144440.log
-===============================
-Task Family: arn
-No inactive task definitions found

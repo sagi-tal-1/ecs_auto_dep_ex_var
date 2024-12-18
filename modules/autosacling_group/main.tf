@@ -1,3 +1,4 @@
+# moduls/autoscaling_group/main.tf
 resource "aws_autoscaling_group" "ecs" {
   name                = "${var.name_prefix}-asg"
   vpc_zone_identifier = var.subnet_ids
@@ -5,6 +6,19 @@ resource "aws_autoscaling_group" "ecs" {
   max_size           = var.max_size
   desired_capacity   = var.desired_capacity
   
+  # capacity rebalancing for better availability
+  capacity_rebalance = true
+
+  # instance refresh for rolling updates
+  instance_refresh {
+    strategy = "Rolling"
+    preferences {
+      min_healthy_percentage = 50
+      instance_warmup = 300
+    }
+  }
+
+
   launch_template {
     id      = var.launch_template_id
     version = "$Latest"
@@ -38,3 +52,16 @@ resource "aws_autoscaling_group" "ecs" {
     heartbeat_timeout     = 300
   }
 } 
+
+# Data source to query the ASG
+data "aws_autoscaling_group" "ecs" {
+  name = aws_autoscaling_group.ecs.name
+}
+
+# Data source to get the instance IDs
+data "aws_instances" "ecs" {
+  filter {
+    name   = "tag:aws:autoscaling:groupName"
+    values = [data.aws_autoscaling_group.ecs.name]
+  }
+}

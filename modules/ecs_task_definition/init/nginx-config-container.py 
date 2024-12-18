@@ -1,0 +1,191 @@
+import os
+import sys
+import logging
+import traceback
+import json
+import boto3
+
+# nginx-config-container.py
+# nginx-config-ec2.py 
+# requirements.txt
+
+# Configure logger
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
+
+class ECSDiscoveryError(Exception):
+    pass
+
+def get_ecs_service_details():
+    """
+    Retrieve ECS service details from environment variables.
+    
+    Returns:
+        dict: ECS service configuration details
+    """
+    try:
+        # Retrieve environment variables
+        cluster_name = os.environ.get('CLUSTER_NAME')
+        service_name = os.environ.get('SERVICE_NAME')
+        aws_region = os.environ.get('AWS_REGION', os.environ.get('AWS_DEFAULT_REGION'))
+
+        if not all([cluster_name, service_name, aws_region]):
+            raise ValueError("Missing required environment variables")
+
+        # Create ECS client
+        ecs_client = boto3.client('ecs', region_name=aws_region)
+
+        # Describe ECS service to get task details
+        response = ecs_client.describe_services(
+            cluster=cluster_name,
+            services=[service_name]
+        )
+
+        # Extract task definition
+        task_definition_arn = response['services'][0]['taskDefinition']
+        task_definition = ecs_client.describe_task_definition(
+            taskDefinition=task_definition_arn
+        )
+
+        # Get task network details
+        return {
+            'cluster_name': cluster_name,
+            'service_name': service_name,
+            'aws_region': aws_region,
+            'task_definition': task_definition
+        }
+    except Exception as e:
+        logger.error(f"Error retrieving ECS service details: {str(e)}")
+        logger.error(traceback.format_exc())
+        raise ECSDiscoveryError(f"Failed to retrieve ECS service details: {str(e)}")
+
+def discover_service_ips(ecs_details):
+    """
+    Discover IP addresses of tasks in the ECS service.
+    
+    Args:
+        ecs_details (dict): ECS service configuration details
+    
+    Returns:
+        list: IP addresses of tasks in the service
+    """
+    try:
+        ec2_client = boto3.client('ec2', region_name=ecs_details['aws_region'])
+        ecs_client = boto3.client('ecs', region_name=ecs_details['aws_region'])
+
+        # List tasks in the service
+        tasks_response = ecs_client.list_tasks(
+            cluster=ecs_details['cluster_name'],
+            serviceName=ecs_details['service_name']
+        )
+
+        # Describe tasks to get EC2 instance details
+        tasks_details = ecs_client.describe_tasks(
+            cluster=ecs_details['cluster_name'],
+            tasks=tasks_response['taskArns']
+        )
+
+        # Extract container instance IDs
+        container_instance_ids = [
+            task['containerInstanceArn'] for task in tasks_details['tasks']
+        ]
+
+        # Get container instance details
+        container_instances = ecs_client.describe_container_instances(
+            cluster=ecs_details['cluster_name'],
+            containerInstances=container_instance_ids
+        )
+
+        # Get EC2 instance IDs
+        ec2_instance_ids = [
+            instance['ec2InstanceId'] for instance in container_instances['containerInstances']
+        ]
+
+        # Describe EC2 instances to get their private IP addresses
+        ec2_instances = ec2_client.describe_instances(InstanceIds=ec2_instance_ids)
+        
+        server_ips = [
+            reservation['Instances'][0]['PrivateIpAddress']
+            for reservation in ec2_instances['Reservations']
+        ]
+
+        return server_ips
+    except Exception as e:
+        logger.error(f"Error discovering service IPs: {str(e)}")
+        logger.error(traceback.format_exc())
+        raise ECSDiscoveryError(f"Failed to discover service IPs: {str(e)}")
+
+def generate_nginx_config(servers):
+    """
+    Generate Nginx configuration with enhanced error handling.
+    
+    Args:
+        servers (list): Server addresses
+    
+    Returns:
+        str: Nginx configuration
+    """
+    if not servers:
+        logger.warning("No servers available to generate Nginx configuration")
+        return None
+    
+    try:
+        # Save to container-level path
+        config_path = '/etc/nginx/nginx.conf'
+        
+        # Ensure the directory exists
+        os.makedirs(os.path.dirname(config_path), exist_ok=True)
+        
+        # Start building the configuration string
+        config = "events { worker_connections 1024; }\n\nhttp {\n"
+        config += "    upstream backend_servers {\n"
+        for server in servers:
+            config += f"        server {server} max_fails=3 fail_timeout=30s;\n"
+        config += "    }\n"
+        config += """
+    server {
+        listen 80;
+        location / {
+            proxy_pass http://backend_servers;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_next_upstream error timeout invalid_header http_500 http_502 http_503 http_504;
+        }
+        # Health check endpoint
+        location /health {
+            return 200 'OK';
+            add_header Content-Type text/plain;
+        }
+    }
+}
+"""
+        # Write configuration to file
+        with open(config_path, 'w') as f:
+            f.write(config)
+        
+        logger.info(f"Nginx configuration generated and saved to {config_path}")
+        return config
+    except Exception as e:
+        logger.error(f"Error generating Nginx configuration: {str(e)}")
+        logger.error(traceback.format_exc())
+        raise ECSDiscoveryError(f"Failed to generate Nginx configuration: {str(e)}")
+
+def main():
+    try:
+        # Retrieve ECS service details
+        ecs_details = get_ecs_service_details()
+        
+        # Discover service IPs
+        server_ips = discover_service_ips(ecs_details)
+        
+        # Generate Nginx configuration
+        generate_nginx_config(server_ips)
+        
+        logger.info("Nginx configuration process completed successfully")
+    except Exception as e:
+        logger.error(f"Nginx configuration generation failed: {str(e)}")
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()

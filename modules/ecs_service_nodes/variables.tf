@@ -41,13 +41,13 @@ variable "nodejs_port" {
   type        = number
 }
 
-variable "private_subnets" {
-  description = "List of private subnet IDs"
-  type        = list(string)
-}
+# variable "private_subnets" {
+#   description = "List of private subnet IDs"
+#   type        = list(string)
+# }
 
 variable "security_group_id" {
-  description = "Security group ID for the ECS tasks"
+  description = "Security group ID for the ECS tasks from ecs taskroll "
   type        = string
 }
 
@@ -69,17 +69,17 @@ variable "tags" {
   default     = {}
 }
 
-variable "alb_security_group_id" {
-  description = "Security group ID of the ALB"
+variable "source_security_group_id" {
+  description = "Security group ID for the ECS tasks from ALB "
   type        = string
 }
 
 
 
-variable "private_subnet_ids" {
-  description = "List of private subnet IDs"
-  type        = list(string)
-}
+# variable "private_subnet_ids" {
+#   description = "List of private subnet IDs"
+#   type        = list(string)
+# }
 
 variable "container_name" {
   description = "Name of the container"

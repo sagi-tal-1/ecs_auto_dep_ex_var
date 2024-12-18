@@ -34,3 +34,4 @@ output "task_definition_container_definitions" {
   description = "Container definitions JSON"
   value       = aws_ecs_task_definition.app.container_definitions
 }
+

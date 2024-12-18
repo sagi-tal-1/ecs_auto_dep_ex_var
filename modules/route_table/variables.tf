@@ -12,7 +12,7 @@ variable "internet_gateway_id" {
   description = "ID of the internet gateway used in the public route."
   type        = string
 }
-
+# public subnets
 variable "subnet_ids" {
   description = "List of public subnet IDs to associate with the public route table."
   type        = list(string)
@@ -31,8 +31,4 @@ variable "availability_zones" {
 variable "nat_gateway_id" {
   description = "ID of the NAT Gateway"
   type        = string
-}
-variable "public_subnet_ids" {
-  description = "List of public subnet IDs"
-  type        = list(string)
 }

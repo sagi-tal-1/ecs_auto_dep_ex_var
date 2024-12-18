@@ -16,7 +16,16 @@ output "ecs_instance_profile_arn" {
   value       = aws_iam_instance_profile.ecs_node.arn
 }
 
+
+# output "iam_instance_profile_name" {
+#   value = aws_iam_instance_profile.ecs_node.name
+# }
+
 output "full_access_policy_arn" {
   description = "ARN of the full access policy"
   value       = aws_iam_policy.full_access.arn
 }
+# output "combined_permissions_policy_arn" {
+#   description = "ARN of the combined ECS permissions policy"
+#   value       = aws_iam_policy.ecs_combined_permissions.arn
+# }

@@ -1,0 +1,459 @@
+container file 
+
+def generate_nginx_config(servers):
+    """
+    Generate Nginx configuration with enhanced error handling
+    
+    Args:
+    servers (list): Server addresses
+    
+    Returns:
+    str: Nginx configuration
+    """
+    if not servers:
+        logger.warning("No servers available to generate Nginx configuration")
+        return None
+    
+    try:
+        # Use the mounted volume path consistently
+        config_path = '/etc/nginx/nginx.conf'
+        
+        # Ensure the directory exists
+        os.makedirs(os.path.dirname(config_path), exist_ok=True)
+        
+        config = "events { worker_connections 1024; }\n\nhttp {\n"
+        config += "    upstream backend_servers {\n"
+        
+        for server in servers:
+            config += f"        server {server} max_fails=3 fail_timeout=30s;\n"
+        
+        config += """    }
+    
+    server {
+        listen 80;
+        
+        location / {
+            proxy_pass http://backend_servers;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_next_upstream error timeout invalid_header http_500 http_502 http_503 http_504;
+        }
+        
+        # Health check endpoint
+        location /health {
+            return 200 'OK';
+            add_header Content-Type text/plain;
+        }
+    }
+}"""
+        
+        # Write the configuration directly to /etc/nginx/nginx.conf
+        with open(config_path, 'w') as f:
+            f.write(config)
+        
+        # Ensure proper permissions
+        os.chmod(config_path, 0o644)
+        
+        logger.info(f"Nginx configuration generated at {config_path}")
+        return config
+    
+    except Exception as e:
+        logger.error(f"Nginx configuration generation failed: {e}")
+        return None
+
+def main():
+    """
+    Main discovery and configuration process
+    """
+    max_attempts = 30
+    retry_delay = 10  # seconds
+    
+    try:
+        # Validate environment
+        env_config = validate_environment()
+        
+        # Create AWS clients
+        ecs_client, ec2_client = create_aws_clients(env_config['AWS_DEFAULT_REGION'])
+        
+        # Discovery loop
+        for attempt in range(1, max_attempts + 1):
+            logger.info(f"Discovery attempt {attempt} of {max_attempts}")
+            
+            try:
+                # Discover servers
+                servers = discover_servers(
+                    ecs_client, 
+                    ec2_client, 
+                    env_config['CLUSTER_NAME'], 
+                    env_config['SERVICE_NAME']
+                )
+                
+                if servers:
+                    logger.info(f"Discovered servers: {servers}")
+                    
+                    # Generate Nginx configuration
+                    nginx_config = generate_nginx_config(servers)
+                    
+                    if nginx_config:
+                        logger.info("Successfully generated Nginx configuration")
+                        break
+                    else:
+                        logger.warning("Failed to generate Nginx configuration")
+                
+            except ECSDiscoveryError as discovery_err:
+                logger.error(f"Discovery error: {discovery_err}")
+            
+            # Wait before next attempt
+            if attempt < max_attempts:
+                logger.info(f"Retrying in {retry_delay} seconds...")
+                time.sleep(retry_delay)
+        
+        else:
+            logger.error("Maximum discovery attempts reached. Exiting.")
+            sys.exit(1)
+    
+    except Exception as e:
+        logger.critical(f"Unhandled error in main process: {e}")
+        logger.critical(traceback.format_exc())
+        sys.exit(1)
+
+local file :::: for ecs 
+
+[root@ip-10-0-2-176 ecs-nginx-discovery]# cat init-script.py
+import boto3
+import os
+import time
+import logging
+import sys
+import traceback
+from botocore.exceptions import ClientError, BotoCoreError
+
+# Advanced logging configuration
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s',
+    handlers=[
+        logging.FileHandler('/var/log/ecs-nginx-discovery.log', mode='w'),
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+logger = logging.getLogger(__name__)
+
+class ECSDiscoveryError(Exception):
+    """Custom exception for ECS discovery errors"""
+    pass
+
+def validate_environment():
+    """
+    Validate required environment variables with detailed checks
+    
+    Returns:
+    dict: Validated environment configuration
+    """
+    try:
+        # Required environment variables
+        env_config = {
+            'CLUSTER_NAME': os.environ.get('CLUSTER_NAME'),
+            'SERVICE_NAME': os.environ.get('SERVICE_NAME'),
+            'AWS_DEFAULT_REGION': os.environ.get('AWS_DEFAULT_REGION', 'us-east-1')
+        }
+        
+        # Check for missing variables
+        missing_vars = [key for key, value in env_config.items() if not value]
+        if missing_vars:
+            raise ECSDiscoveryError(f"Missing required environment variables: {', '.join(missing_vars)}")
+        
+        logger.info("Environment variables validated successfully")
+        return env_config
+    
+    except Exception as e:
+        logger.error(f"Environment validation failed: {e}")
+        raise
+
+def create_aws_clients(region):
+    """
+    Create AWS service clients with error handling
+    
+    Args:
+    region (str): AWS region
+    
+    Returns:
+    tuple: ECS and EC2 clients
+    """
+    try:
+        session = boto3.Session(region_name=region)
+        
+        # Verify AWS credentials
+        sts_client = session.client('sts')
+        sts_client.get_caller_identity()
+        
+        ecs_client = session.client('ecs')
+        ec2_client = session.client('ec2')
+        
+        logger.info(f"AWS clients created successfully for region {region}")
+        return ecs_client, ec2_client
+    
+    except (ClientError, BotoCoreError) as e:
+        logger.error(f"Failed to create AWS clients: {e}")
+        logger.error(traceback.format_exc())
+        raise ECSDiscoveryError(f"AWS client creation failed: {e}")
+
+def list_tasks(ecs_client, cluster_name, service_name):
+    """
+    List tasks for a given ECS service with detailed error handling
+    
+    Args:
+    ecs_client (boto3.client): ECS client
+    cluster_name (str): ECS cluster name
+    service_name (str): ECS service name
+    
+    Returns:
+    list: Task ARNs
+    """
+    try:
+        tasks_response = ecs_client.list_tasks(
+            cluster=cluster_name,
+            serviceName=service_name
+        )
+        tasks = tasks_response.get('taskArns', [])
+        
+        if not tasks:
+            logger.warning(f"No tasks found for service {service_name}")
+        else:
+            logger.info(f"Found {len(tasks)} tasks in service {service_name}")
+        
+        return tasks
+    
+    except ClientError as e:
+        error_code = e.response.get('Error', {}).get('Code')
+        error_message = e.response.get('Error', {}).get('Message')
+        
+        logger.error(f"ECS ListTasks failed - Code: {error_code}, Message: {error_message}")
+        logger.error(traceback.format_exc())
+        
+        if error_code == 'AccessDeniedException':
+            raise ECSDiscoveryError("Insufficient IAM permissions to list tasks")
+        else:
+            raise ECSDiscoveryError(f"Failed to list tasks: {error_message}")
+
+def describe_tasks(ecs_client, cluster_name, tasks):
+    """
+    Describe ECS tasks with comprehensive error handling
+    
+    Args:
+    ecs_client (boto3.client): ECS client
+    cluster_name (str): ECS cluster name
+    tasks (list): Task ARNs
+    
+    Returns:
+    list: Detailed task information
+    """
+    try:
+        task_details_response = ecs_client.describe_tasks(
+            cluster=cluster_name,
+            tasks=tasks
+        )
+        
+        task_details = task_details_response.get('tasks', [])
+        failed_tasks = task_details_response.get('failures', [])
+        
+        if failed_tasks:
+            for failure in failed_tasks:
+                logger.warning(f"Task description failure: {failure}")
+        
+        return task_details
+    
+    except ClientError as e:
+        logger.error(f"Task description failed: {e}")
+        logger.error(traceback.format_exc())
+        raise ECSDiscoveryError("Failed to describe tasks")
+
+def discover_servers(ecs_client, ec2_client, cluster_name, service_name):
+    """
+    Comprehensive ECS task and server discovery
+    
+    Args:
+    ecs_client (boto3.client): ECS client
+    ec2_client (boto3.client): EC2 client
+    cluster_name (str): ECS cluster name
+    service_name (str): ECS service name
+    
+    Returns:
+    list: Server addresses (IP:Port)
+    """
+    try:
+        # List tasks
+        tasks = list_tasks(ecs_client, cluster_name, service_name)
+        if not tasks:
+            return []
+        
+        # Describe tasks
+        task_details = describe_tasks(ecs_client, cluster_name, tasks)
+        
+        # Prepare instance IDs
+        instance_ids = set()
+        for task in task_details:
+            if 'containerInstanceArn' in task:
+                container_instances = ecs_client.describe_container_instances(
+                    cluster=cluster_name,
+                    containerInstances=[task['containerInstanceArn']]
+                )
+                instance_ids.update([
+                    ci['ec2InstanceId'] 
+                    for ci in container_instances.get('containerInstances', [])
+                ])
+        
+        # Describe EC2 instances
+        if not instance_ids:
+            logger.warning("No EC2 instances found for tasks")
+            return []
+        
+        ec2_instances = ec2_client.describe_instances(InstanceIds=list(instance_ids))
+        
+        # Build IP mapping
+        ip_mapping = {
+            instance['InstanceId']: instance['PrivateIpAddress']
+            for reservation in ec2_instances['Reservations']
+            for instance in reservation['Instances']
+        }
+        
+        # Extract servers
+        servers = []
+        for task in task_details:
+            for container in task.get('containers', []):
+                for binding in container.get('networkBindings', []):
+                    if binding.get('hostPort'):
+                        # Find corresponding EC2 instance
+                        container_instance = ecs_client.describe_container_instances(
+                            cluster=cluster_name,
+                            containerInstances=[task['containerInstanceArn']]
+                        )['containerInstances'][0]
+                        
+                        instance_id = container_instance['ec2InstanceId']
+                        ip = ip_mapping.get(instance_id)
+                        
+                        if ip:
+                            servers.append(f"{ip}:{binding['hostPort']}")
+        
+        return servers
+    
+    except Exception as e:
+        logger.error(f"Server discovery failed: {e}")
+        logger.error(traceback.format_exc())
+        return []
+
+def generate_nginx_config(servers):
+    """
+    Generate Nginx configuration with enhanced error handling
+    
+    Args:
+    servers (list): Server addresses
+    
+    Returns:
+    str: Nginx configuration
+    """
+    if not servers:
+        logger.warning("No servers available to generate Nginx configuration")
+        return None
+    
+    try:
+        config = "events { worker_connections 1024; }\n\nhttp {\n"
+        config += "    upstream backend_servers {\n"
+        
+        for server in servers:
+            config += f"        server {server} max_fails=3 fail_timeout=30s;\n"
+        
+        config += """    }
+    
+    server {
+        listen 80;
+        
+        location / {
+            proxy_pass http://backend_servers;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_next_upstream error timeout invalid_header http_500 http_502 http_503 http_504;
+        }
+    }
+}"""
+        
+        return config
+    
+    except Exception as e:
+        logger.error(f"Nginx configuration generation failed: {e}")
+        return None
+
+def main():
+    """
+    Main discovery and configuration process
+    """
+    max_attempts = 30
+    retry_delay = 10  # seconds
+    
+    try:
+        # Validate environment
+        env_config = validate_environment()
+        
+        # Create AWS clients
+        ecs_client, ec2_client = create_aws_clients(env_config['AWS_DEFAULT_REGION'])
+        
+        # Discovery loop
+        for attempt in range(1, max_attempts + 1):
+            logger.info(f"Discovery attempt {attempt} of {max_attempts}")
+            
+            try:
+                # Discover servers
+                servers = discover_servers(
+                    ecs_client, 
+                    ec2_client, 
+                    env_config['CLUSTER_NAME'], 
+                    env_config['SERVICE_NAME']
+                )
+                
+                if servers:
+                    logger.info(f"Discovered servers: {servers}")
+                    
+                    # Generate Nginx configuration
+                    nginx_config = generate_nginx_config(servers)
+                    
+                    if nginx_config:
+                        # Write configuration
+                        os.makedirs('/nginx-config', exist_ok=True)
+                        with open('/nginx-config/nginx.conf', 'w') as f:
+                            f.write(nginx_config)
+                        
+                        logger.info("Successfully generated Nginx configuration")
+                        break
+                    else:
+                        logger.warning("Failed to generate Nginx configuration")
+                
+            except ECSDiscoveryError as discovery_err:
+                logger.error(f"Discovery error: {discovery_err}")
+            
+            # Wait before next attempt
+            if attempt < max_attempts:
+                logger.info(f"Retrying in {retry_delay} seconds...")
+                time.sleep(retry_delay)
+        
+        else:
+            logger.error("Maximum discovery attempts reached. Exiting.")
+            sys.exit(1)
+    
+    except Exception as e:
+        logger.critical(f"Unhandled error in main process: {e}")
+        logger.critical(traceback.format_exc())
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()
+[root@ip-10-0-2-176 ecs-nginx-discovery]# 
+
+
+
+
+
+
+
+

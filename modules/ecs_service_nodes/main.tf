@@ -20,26 +20,21 @@ resource "aws_ecs_service" "nodejs" {
       base            = 1
     }
   }
-  # Placement strategies
-  ordered_placement_strategy {
-    type  = "spread"
-    field = "attribute:ecs.availability-zone"
-  }
-  ordered_placement_strategy {
-    type  = "spread"
-    field = "instanceId"
-  }
+ 
+  
   # Load balancer configuration
   load_balancer {
+    
     target_group_arn = var.nodejs_target_group_arn
     container_name   = var.container_name
     container_port   = 3000
   }
-network_configuration {
-    subnets          = var.private_subnets
-    security_groups  = [var.security_group_id]
-    assign_public_ip = false
-  }
+# network_configuration {
+#     subnets          = var.private_subnets
+#     security_groups  = [var.security_group_id]
+#     assign_public_ip = false
+#   }
+ 
   # Deployment settings
   deployment_circuit_breaker {
     enable   = true
@@ -71,8 +66,8 @@ resource "aws_security_group_rule" "allow_alb_to_nodejs" {
   from_port                = var.nodejs_port
   to_port                  = var.nodejs_port
   protocol                 = "tcp"
-  source_security_group_id = var.security_group_id
-  security_group_id        = var.security_group_id
+  source_security_group_id = var.source_security_group_id # ALB security group
+  security_group_id        = var.security_group_id  # ECS tasks security group
   description             = "Allow ALB to Node.js ECS tasks"
 
  

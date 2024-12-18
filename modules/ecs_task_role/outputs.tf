@@ -1,9 +1,19 @@
-output "task_role_arn" {
-  value       = aws_iam_role.ecs_task_role.arn
-  description = "ARN of the ECS Task Role"
+# Output the instance profile name for use in launch template
+output "ecs_instance_profile_name" {
+  value = aws_iam_instance_profile.ecs_instance_profile.name
 }
 
-output "execution_role_arn" {
-  value       = aws_iam_role.ecs_exec_role.arn  # Changed from ecs_execution_role to ecs_exec_role
-  description = "ARN of the ECS Task Execution Role"
+# Output the instance profile arn
+output "ecs_instance_profile_arn" {
+  value = aws_iam_instance_profile.ecs_instance_profile.arn
+}
+
+# Output the task role arn
+output "ecs_task_role_arn" {
+  value = aws_iam_role.ecs_task_role.arn
+}
+
+# Output the task execution role arn
+output "ecs_task_execution_role_arn" {
+  value = aws_iam_role.ecs_exec_role.arn
 }

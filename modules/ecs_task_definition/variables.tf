@@ -7,9 +7,11 @@ variable "family" {
 }
 
 variable "container_name" {
-  description = "Name of the container"
+  description = "Base name for container names"
   type        = string
+  default     = "demo-container"
 }
+
 
 variable "log_group_name" {
   description = "Name of the CloudWatch log group"
@@ -95,3 +97,55 @@ variable "docker_image" {
      type        = number
      default     = null
    }
+   # Variables needed
+variable "vpc_id" {
+  description = "ID of the VPC where the security group will be created"
+  type        = string
+}
+
+
+variable "log_stream_name_prefix" {
+  description = "Prefix for naming the CloudWatch Log Stream"
+  type        = string
+}
+
+variable "expected_nodejs_tasks" {
+  description = "Number of expected NodeJS tasks to wait for"
+  type        = number
+  default     = 2  # You can override this in your deployment
+}
+
+#------------
+# variable "ecs_service" {
+#   description = "ECS service object"
+#   type = object({
+#     id   = string
+#     name = string
+#   })
+# }
+
+# variable "cluster_name" {
+#   description = "Name of the ECS cluster"
+#   type        = string
+  
+# }
+variable "init_container_image" {
+  description = "The image to use for the initialization container"
+  type        = string
+}
+
+variable "nodejs_service_name" {
+  description = "The name of the ECS service to monitor"
+  type        = string
+}
+
+# variable "aws_region" {
+#   description = "The AWS region"
+#   type        = string
+# }
+
+
+variable "service_name_id" {
+  description = "The name of the ECS service to monitor"
+  type        = string
+}

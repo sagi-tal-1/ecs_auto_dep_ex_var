@@ -1,6 +1,6 @@
 
 #moduls/ecs_launch_template/virabels.tf
-variable "name_prefix" {
+variable "ecs_instance_profile_name" {
   description = "Prefix for the launch template name."
   type        = string
 }
@@ -81,10 +81,28 @@ variable "error_log" {
   type        = string
 }
 
-variable "public_subnet_ids" {
+
+# variable "public_subnet_ids" {
+#   description = "List of public subnet IDs for the ECS service"
+#   type        = list(string)
+# }
+
+###### #private #public
+variable "private_subnet_ids" {
   description = "List of public subnet IDs for the ECS service"
   type        = list(string)
 }
 
-######
+variable "alb_security_group_id" {
+  description = "The ID of the ALB security group"
+  type        = string
+}
 
+variable "vpc_id" {
+  description = "ID of the VPC where resources will be created"
+  type        = string
+}
+variable "aws_region" {
+  description = "The AWS region"
+  type        = string
+}

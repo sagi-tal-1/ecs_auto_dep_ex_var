@@ -1,4 +1,6 @@
 # modules/ecs_service_nodes/outputs.tf
+# modules/ecs_service_nodes/outputs.tf
+# modules/ecs_service_nodes/outputs.tf
 
 output "service_id" {
   description = "The ID of the ECS service"
@@ -21,4 +23,8 @@ output "security_group_rule_id" {
 }
 output "container_name" {
   value = var.container_name
+}
+output "ecs_service" {
+  description = "ECS service configuration for Node.js application with details including service name, cluster, and deployment settings"
+  value       = aws_ecs_service.nodejs
 }

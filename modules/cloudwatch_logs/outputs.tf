@@ -9,6 +9,9 @@ output "cloudwatch_log_group_arn" {
   value       = aws_cloudwatch_log_group.this.arn
 }
 
-
+output "log_stream_name" {
+  description = "The name of the CloudWatch Log Stream"
+  value       = aws_cloudwatch_log_stream.this.name
+}
 
 

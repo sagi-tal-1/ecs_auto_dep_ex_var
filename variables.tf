@@ -101,12 +101,12 @@ variable "log_file" {
   default     = "/var/log/ecs/user_data.log"
 }
 
-variable "container_name" {
-  description = "Base name for the container (will be suffixed with -nginx)"
-  type        = string
-  default     = "nginx_origen"  # You can change this default value as needed
-}
 
+variable "container_name" {
+  description = "The base name for the container"
+  type        = string
+  default     = "my-container"
+}
 
 
 variable "nodejs_container_name" {
@@ -159,3 +159,6 @@ variable "tags" {
   default     = {}
 }
 
+output "container_name" {
+  value = module.ecs_task_definition.container_name
+}
