@@ -58,4 +58,32 @@ variable "desired_count" {
   type        = number
   default     = 2
 }
+#--------------------
 
+# variable "service_discovery_namespace_id" {
+#   description = "The ID of the AWS Cloud Map namespace"
+#   type        = string
+# }
+variable "service_discovery_service_name" {
+  description = "Name of the service discovery service"
+  type        = string
+}
+
+variable "service_discovery_namespace" {
+  description = "The name of the AWS Cloud Map namespace"
+  type        = string
+}
+
+variable "cluster_name" {
+  type        = string
+  description = "Name of the ECS cluster"
+}
+variable "service_name" {
+  type        = string
+  description = "Name of the ECS service"
+}
+
+variable "environment" {
+  type        = string
+  description = "Name of the ECS environment"
+}

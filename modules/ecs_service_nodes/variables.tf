@@ -85,3 +85,14 @@ variable "container_name" {
   description = "Name of the container"
   type        = string
 }
+variable "service_discovery_service_arn" {
+  description = "ARN of the service discovery service"
+  type        = string
+}
+
+
+
+# variable "ecs_tasks_capacity_provider_name" {
+#   description = "ARN of the ecs_tasks_capacity_provider_name"
+#   type        = string
+# }

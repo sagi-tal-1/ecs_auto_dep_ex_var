@@ -1,3 +1,5 @@
+
+# modules/ecs_task_role/main.tf
 # Existing ECS Task Role
 # ECS Task Role
 resource "aws_iam_role" "ecs_task_role" {
@@ -33,9 +35,9 @@ resource "aws_iam_role_policy" "ecs_stop_task_policy" {
   })
 }
 
-resource "aws_iam_role_policy" "ecs_service_discovery" {
+resource "aws_iam_role_policy" "ecs_service_discoveryv1" {
   name = "ecs-service-discovery-policy"
-  role = aws_iam_role.ecs_instance_role.id
+  role = aws_iam_role.ecs_exec_role.id  
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -235,7 +237,7 @@ resource "aws_iam_role_policy_attachment" "ecs_exec_role_ssm_policy" {
 }
 
 # Additional permissions for Docker Hub access from private subnet
-resource "aws_iam_role_policy" "ecs_task_execution_docker_policy" {
+resource "aws_iam_role_policy" "ecs_task_execution_docker_policy_v2" {
   name = "ecs_task_execution_docker_policy"
   role = aws_iam_role.ecs_task_role.id
 
@@ -367,10 +369,293 @@ resource "aws_iam_instance_profile" "ecs_instance_profile" {
   role        = aws_iam_role.ecs_instance_role.name
 }
 
+# ECS Task Metadata Endpoint Policy
+resource "aws_iam_role_policy" "ecs_task_metadata_policy" {
+  name = "ecs-task-metadata-policy"
+  role = aws_iam_role.ecs_task_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "ecs:DescribeTasks",
+          "ecs:ListTasks",
+          "ecs:DescribeContainerInstances",
+          "ecs:DescribeClusters",
+          "ecs:ListContainerInstances",
+          "ecs:ListClusters",
+          "ecs:ListServices",
+          "ecs:DescribeServices",
+          "ecs:ListTaskDefinitions",
+          "ecs:DescribeTaskDefinition"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+# EC2 Instance Metadata and Tags Policy
+resource "aws_iam_role_policy" "ec2_metadata_policy" {
+  name = "ec2-metadata-policy"
+  role = aws_iam_role.ecs_instance_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "ec2:DescribeInstances",
+          "ec2:DescribeTags",
+          "ec2:DescribeInstanceTypes",
+          "ec2:DescribeInstanceStatus",
+          "ecs:ListAttributes",
+          "ecs:GetAttributes",
+          "ecs:ListTaskDefinitionFamilies",
+          "ecs:ListTagsForResource"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+# Enhanced Monitoring Policy
+resource "aws_iam_role_policy" "enhanced_monitoring_policy" {
+  name = "enhanced-monitoring-policy"
+  role = aws_iam_role.ecs_task_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "cloudwatch:PutMetricData",
+          "cloudwatch:GetMetricStatistics",
+          "cloudwatch:ListMetrics",
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:DescribeLogStreams",
+          "logs:PutLogEvents"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
 
 
+# Add this new policy attachment for the execution role
+resource "aws_iam_role_policy" "ecs_exec_additional_permissions" {
+  name = "ecs-exec-additional-permissions"
+  role = aws_iam_role.ecs_exec_role.id
 
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "ecs:ListTasks",
+          "ecs:DescribeTasks",
+          "ecs:ListServices",
+          "ecs:DescribeServices",
+          "ecs:ListClusters",
+          "ecs:DescribeClusters"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
 
+# Add this new policy for the EC2 instance role
+resource "aws_iam_role_policy" "ecs_instance_additional_permissions" {
+  name = "ecs-instance-additional-permissions"
+  role = aws_iam_role.ecs_instance_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "ecs:ListTasks",
+          "ecs:DescribeTasks",
+          "ecs:ListServices",
+          "ecs:DescribeServices",
+          "ecs:ListClusters",
+          "ecs:DescribeClusters",
+          "ecs:DescribeContainerInstances",
+          "ec2:DescribeInstances" 
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy" "ecs_exec_discovery_permissions" {
+  name = "ecs-exec-discovery-permissions"
+  role = aws_iam_role.ecs_exec_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "ecs:DescribeContainerInstances",
+          "ecs:ListTasks",
+          "ecs:DescribeTasks",
+          "ec2:DescribeInstances"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+# ECS Service Discovery Permissions for Task Role
+resource "aws_iam_role_policy" "ecs_service_discoveryv2" {
+  name = "ecs-service-discovery-policy"
+  role = aws_iam_role.ecs_exec_role.id  
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "ecs:DescribeServices",
+          "ecs:ListTasks",
+          "ecs:DescribeTasks",
+          "ecs:DescribeContainerInstances",
+          "ec2:DescribeInstances",
+          "ecs:DiscoverInstances"  # Added container discovery permission
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+# Docker API Permissions for Task Role (Added Docker API permissions)
+resource "aws_iam_role_policy" "ecs_task_execution_docker_policy_v1" {
+  name = "ecs_task_execution_docker_policy"
+  role = aws_iam_role.ecs_task_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "ecr:GetAuthorizationToken",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents",
+          "ecs:ExecuteCommand",  # Added Docker API permission for task execution
+          "ecs:RunTask",         # Added Docker API permission for running tasks
+          "ecs:StopTask"         # Added Docker API permission for stopping tasks
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+# Filesystem Write Permissions (for EFS or other file systems)
+resource "aws_iam_role_policy" "task_filesystem_write_policy" {
+  name = "task-filesystem-write-policy"
+  role = aws_iam_role.ecs_task_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "efs:WriteFile",
+          "efs:WriteData",  # Filesystem write permissions for EFS
+          "efs:CreateFileSystem" # Permission to create filesystems if needed
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+resource "aws_iam_role_policy" "container_discovery_permissions" {
+  name = "container-discovery-permissions"
+  role = aws_iam_role.ecs_task_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "ecs:DiscoverPollEndpoint",
+          "ecs:Poll",
+          "ecs:RegisterContainerInstance",
+          "ecs:DeregisterContainerInstance",
+          "ecs:SubmitContainerStateChange",
+          "ecs:SubmitTaskStateChange"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+# Add this policy to your ecs_task_role module
+resource "aws_iam_role_policy" "ecs_managed_tags_policy" {
+  name = "ecs-managed-tags-policy"
+  role = aws_iam_role.ecs_task_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "ec2:CreateTags",
+          "ec2:DeleteTags",
+          "ecs:TagResource",
+          "ecs:UntagResource",
+          "ecs:ListTagsForResource"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+# Add this policy to your ecs_exec_role for execution permissions
+resource "aws_iam_role_policy" "ecs_exec_tags_policy" {
+  name = "ecs-exec-tags-policy"
+  role = aws_iam_role.ecs_exec_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "ec2:CreateTags",
+          "ec2:DeleteTags",
+          "ecs:TagResource",
+          "ecs:UntagResource",
+          "ecs:ListTagsForResource"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+#-------------------------------
 
 # resource "aws_iam_role" "ecs_task_role" {
 #   name_prefix        = "${var.task_role_name_prefix}"

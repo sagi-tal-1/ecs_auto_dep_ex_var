@@ -1,151 +1,60 @@
 #moduls/ecs_task_definition/main.tf
-# resource "aws_ecs_task_definition" "app" {   
-#   family                   = var.family   
-#   requires_compatibilities = ["EC2"]   
-#   network_mode            = "bridge"   
-#   cpu                     = var.cpu   
-#   memory                  = var.memory   
-#   execution_role_arn      = var.execution_role_arn   
-#   task_role_arn          = var.task_role_arn    
-  
-#   container_definitions = jsonencode([
-#     {
-#       # Init container definition
-#       name      = "init-nginx-config"
-#       image     = "${var.init_container_image}"
-#       essential = false
-#       cpu       = 128    # Smaller CPU allocation
-#       memory    = 128    # Smaller memory allocation
-      
-#       mountPoints = [
-#         {
-#           sourceVolume  = "nginx-config"
-#           containerPath = "/etc/nginx"  # Match the Nginx config directory
-#           readOnly     = false
-#         }
-#       ]
-#       environment = [
-#         {
-#           name  = "CLUSTER_NAME"
-#           value = var.cluster_name
-#         },
-#         {
-#           name  = "SERVICE_NAME"
-#           value = var.service_name
-#         },
-#         {
-#           name  = "AWS_DEFAULT_REGION"
-#           value = var.aws_region
-#         },
-#         {
-#           name  = "AWS_REGION"
-#           value = var.aws_region
-#         }
-#       ]
-#       logConfiguration = {         
-#         logDriver = "awslogs"         
-#         options = {           
-#           awslogs-group         = "${var.log_group_name}-init"           
-#           awslogs-region        = var.log_region           
-#           awslogs-stream-prefix = "${var.log_stream_name_prefix}-init"         
-#         }       
-#       }
-#     },
-#     {       
-#       # Main nginx container definition
-#       name      = var.container_name        
-#       image     = var.docker_image       
-#       cpu       = 128 #var.cpu       
-#       memory    = 128 #var.memory       
-#       essential = true
-#       healthCheck = {
-#         command     = ["CMD-SHELL", "curl -f http://localhost:${var.nginx_port}/health || exit 1"]
-#         interval    = 30
-#         timeout     = 5
-#         retries     = 3
-#         startPeriod = 60
-#       }
-#       dependsOn = [
-#         {
-#           containerName = "init-nginx-config"
-#           condition    = "COMPLETE"
-#         }
-#       ]             
-#       portMappings = [         
-#         {           
-#           containerPort = var.nginx_port           
-#           hostPort      = 80           
-#           protocol      = "tcp"         
-#         }       
-#       ]                     
-#       mountPoints = [       
-#         {       
-#           sourceVolume  = "nginx-config"       
-#           containerPath = "/etc/nginx"       # Mount the entire nginx config directory
-#           readOnly      = true       
-#         }       
-#       ]       
-#       logConfiguration = {         
-#         logDriver = "awslogs"         
-#         options = {           
-#           awslogs-group         = var.log_group_name           
-#           awslogs-region        = var.log_region           
-#           awslogs-stream-prefix = var.log_stream_name_prefix         
-#         }       
-#       }     
-#     }   
-#   ])  
-
-#   volume { 
-#     name = "nginx-config" 
-#     docker_volume_configuration {
-#       scope         = "task"
-#       autoprovision = true
-#       driver        = "local"
-#     }
-#   }  
-# }
-#----------------------------------------------------------------------------
 resource "aws_ecs_task_definition" "app" {
   family                   = var.family
   requires_compatibilities = ["EC2"]
-  network_mode             = "bridge"
-  cpu                      = var.cpu
-  memory                   = var.memory
-  execution_role_arn       = var.execution_role_arn
-  task_role_arn            = var.task_role_arn
+  network_mode            = "bridge"
+  cpu                     = var.cpu
+  memory                  = var.memory
+  execution_role_arn      = var.execution_role_arn
+  task_role_arn           = var.task_role_arn
+
+  volume {
+    name      = "docker-sock"
+    host_path = "/var/run/docker.sock"
+  }
 
   container_definitions = jsonencode([
     {
-      name      = var.container_name 
+      name      = var.container_name  # Keep the original container name
       image     = var.docker_image
       cpu       = var.cpu
       memory    = var.memory
       essential = true
      
+      mountPoints = [
+        {
+          sourceVolume  = "docker-sock"
+          containerPath = "/var/run/docker.sock"
+          readOnly      = true
+        }
+      ]
+
       portMappings = [
         {
           containerPort = 80
           hostPort      = 80
           protocol      = "tcp"
         }
-      ],
+      ]
       
       environment = [
         {
           name  = "NODEJS_SERVICE_NAME"
           value = var.nodejs_service_name
+        },
+        {
+          name  = "TASK_INDEX"
+          value = "${replace(substr(sha256(timestamp()), 0, 1), "[a-f]", "")}"
         }
-        # Add any other necessary environment variables here
-      ],
+      ]
 
       healthCheck = {
-        command     = ["CMD-SHELL", "curl -f http://localhost/health || exit 1"]
+        command     = ["CMD-SHELL", "test -r /var/run/docker.sock && curl -f http://localhost/health || exit 1"]
         interval    = 30
         timeout     = 5
         retries     = 3
         startPeriod = 60
-      },
+      }
 
       logConfiguration = {
         logDriver = "awslogs"
@@ -159,25 +68,18 @@ resource "aws_ecs_task_definition" "app" {
   ])
 }
 
-# Create CloudWatch log group
+
+# The rest of your resources remain unchanged
 resource "aws_cloudwatch_log_group" "ecs_logs" {
   name              = "/ecs/${var.family}"
   retention_in_days = 30
 }
 
-
-
-
-
-
-
-# Security group for ECS tasks
 resource "aws_security_group" "ecs_tasks" {
   name        = "ecs-tasks-sg"
   description = "Security group for ECS tasks with Nginx"
   vpc_id      = var.vpc_id
 
-  # Inbound rule for HTTP (port 80)
   ingress {
     description      = "HTTP from VPC"
     from_port        = 80
@@ -187,7 +89,6 @@ resource "aws_security_group" "ecs_tasks" {
     ipv6_cidr_blocks = ["::/0"]
   }
 
-  # Inbound rule for application port (3000)
   ingress {
     description      = "Application Port"
     from_port        = 3000
@@ -196,7 +97,6 @@ resource "aws_security_group" "ecs_tasks" {
     cidr_blocks      = ["0.0.0.0/0"]
   }
 
-  # Outbound rule - allow all traffic
   egress {
     from_port        = 0
     to_port          = 0
@@ -209,6 +109,126 @@ resource "aws_security_group" "ecs_tasks" {
     Name = "ecs-tasks-security-group"
   }
 }
+
+
+
+
+#-L-A-S-T C-H-A-N-C-E-S
+# resource "aws_ecs_task_definition" "app" {
+#   family                   = var.family
+#   requires_compatibilities = ["EC2"]
+#   network_mode            = "bridge"
+#   cpu                     = var.cpu
+#   memory                  = var.memory
+#   execution_role_arn      = var.execution_role_arn
+#   task_role_arn           = var.task_role_arn
+
+#   volume {
+#     name      = "docker-sock"
+#     host_path = "/var/run/docker.sock"
+#   }
+
+#   container_definitions = jsonencode([
+#     {
+#       name      = var.container_name 
+#       image     = var.docker_image
+#       cpu       = var.cpu
+#       memory    = var.memory
+#       essential = true
+     
+#       mountPoints = [
+#         {
+#           sourceVolume  = "docker-sock"
+#           containerPath = "/var/run/docker.sock"
+#           readOnly      = true
+#         }
+#       ]
+
+#       portMappings = [
+#         {
+#           containerPort = 80
+#           hostPort      = 80
+#           protocol      = "tcp"
+#         }
+#       ]
+      
+#       environment = [
+#         {
+#           name  = "NODEJS_SERVICE_NAME"
+#           value = var.nodejs_service_name
+#         },
+        
+#       ]
+
+#       healthCheck = {
+#         command     = ["CMD-SHELL", "test -r /var/run/docker.sock && curl -f http://localhost/health || exit 1"]
+#         interval    = 30
+#         timeout     = 5
+#         retries     = 3
+#         startPeriod = 60
+#       }
+
+#       logConfiguration = {
+#         logDriver = "awslogs"
+#         options = {
+#           awslogs-group         = "/ecs/${var.family}"
+#           awslogs-region        = var.log_region
+#           awslogs-stream-prefix = "ecs"
+#         }
+#       }
+#     }
+#   ])
+# }
+# # Create CloudWatch log group
+# resource "aws_cloudwatch_log_group" "ecs_logs" {
+#   name              = "/ecs/${var.family}"
+#   retention_in_days = 30
+# }
+
+
+# # Security group for ECS tasks
+# resource "aws_security_group" "ecs_tasks" {
+#   name        = "ecs-tasks-sg"
+#   description = "Security group for ECS tasks with Nginx"
+#   vpc_id      = var.vpc_id
+
+#   # Inbound rule for HTTP (port 80)
+#   ingress {
+#     description      = "HTTP from VPC"
+#     from_port        = 80
+#     to_port          = 80
+#     protocol         = "tcp"
+#     cidr_blocks      = ["0.0.0.0/0"]
+#     ipv6_cidr_blocks = ["::/0"]
+#   }
+
+#   # Inbound rule for application port (3000)
+#   ingress {
+#     description      = "Application Port"
+#     from_port        = 3000
+#     to_port          = 3000
+#     protocol         = "tcp"
+#     cidr_blocks      = ["0.0.0.0/0"]
+#   }
+
+#   # Outbound rule - allow all traffic
+#   egress {
+#     from_port        = 0
+#     to_port          = 0
+#     protocol         = "-1"
+#     cidr_blocks      = ["0.0.0.0/0"]
+#     ipv6_cidr_blocks = ["::/0"]
+#   }
+
+#   tags = {
+#     Name = "ecs-tasks-security-group"
+#   }
+# }
+
+
+
+
+
 #----------------------------------------------------------------------------
 # resource "null_resource" "deployment_check" {
 #   triggers = {

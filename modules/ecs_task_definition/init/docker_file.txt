@@ -1,9 +1,11 @@
 ROM public.ecr.aws/r5j4x4k4/elemy/nginx-dynamic-healthcheck:latest
 
 # Install required packages
-RUN apk add --no-cache \
+RUN apk update && apk add --no-cache \
     curl \
     bash \
+    docker-cli \
+    bind-tools \
     supervisor \
     docker \
     python3 \
@@ -11,6 +13,7 @@ RUN apk add --no-cache \
     groff \
     less \
     git \
+    jq \
     && pip3 install --no-cache-dir awscli \
     && rm -rf /var/cache/apk/*
 
@@ -42,10 +45,7 @@ EXPOSE 80
 ENTRYPOINT ["/usr/bin/supervisord", "-c", "/etc/supervisord.conf"]
 
 
-apk add --no-cache \
-bash \
-bind-tools \
-curl
+
 
 
 
@@ -139,6 +139,10 @@ chmod +x discover_containers.sh
 
 
 # Build the new image
+dns_records {
+  ttl  = 10
+  type = "SRV"
+}
 docker build -t my_custom_nginx_image1:v5 .
 
 # Stop and remove the old container
@@ -160,18 +164,18 @@ docker logs my_custom_nginx_container_v5
 docker exec my_custom_nginx_container_v5 supervisorctl status
 
 # Check discovery logs
-docker exec my_custom_nginx_container_v5 tail -f /var/log/supervisor/discovery.log
+docker exec 4fdf5bff4c65  tail -f /var/log/supervisor/discovery.log
 
 
 docker logs my_custom_nginx_container_v6
 
 docker cp default.conf my_custom_nginx_image1:v5 :/etc/nginx/conf.d/default.conf
 
-docker exec -it 65abea87465a /bin/sh
+docker exec -it 131c00e4f328 /bin/sh
 
 docker exec -it my_custom_nginx_container /bin/sh
 
-
+docker exec -it 0065e56ef722 /bin/sh
 
 docker run -d \
   --name my_custom_nginx_container_v5 \
@@ -553,7 +557,7 @@ docker exec awsemc1980/my_custom_nginx_image1:v5 cat /etc/nginx/conf.d/upstream.
 docker exec my_custom_nginx_container cat /etc/nginx/conf.d/
 
 docker exec my_custom_nginx_container find / -type f -name "*.log" 2>/dev/null
-
+docker exec my_custom_nginx_container find / -type f -name "*.log" 2>/dev/null
 
 ec2-user@ip-10-0-2-138 ~]$ docker exec my_custom_nginx_container find / -type f -name "*.log" 2>/dev/null
 /var/log/supervisor/supervisord.log
@@ -573,7 +577,7 @@ docker exec my_custom_nginx_container tail -f /var/log/supervisor/nginx.log
 docker exec my_custom_nginx_container tail -f /var/log/discover_containers.log
 
 
-
+docker exec 0065e56ef722 ail -f /var/log/discover_containers.log
 
 
 Steps to Resolve the Issue
@@ -654,3 +658,573 @@ Let me know if you need further guidance!
 
 You’ve hit the Free plan limit for GPT-4o.
 Respons
+
+0065e56ef722 
+docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' 0065e56ef722
+
+
+
+docker exec 0065e56ef722 tail -f /var/log/supervisor/supervisord.log
+
+docker exec  36ec5fe7d670 tail -f /var/log/supervisor/discovery.log
+
+docker exec 0065e56ef722 tail -f /var/log/supervisor/nginx.log
+
+docker exec 0065e56ef722 tail -f /var/log/discover_containers.log
+docker exec 020633919d1e tail -f /var/log/discover_containers.log
+
+docker exec -it 020633919d1e /bin/sh
+
+docker stop debug-container || true
+docker rm debug-container || true
+docker run -d \
+  --name debug-container \
+  --restart unless-stopped \
+  -p 3000:3000 \
+  -p 9229:9229 \
+  -e NODE_ENV=production \
+  -e SERVICE_IDENTITY=my-container-nodejs \
+  debug-node-app:v3
+
+
+
+docker stop 72992336769f     
+docker rm -f 72992336769f  
+docker run -d -p 3000:3000 identity-service
+
+
+
+
+
+
+docker stop debug-container
+docker rm debug-container
+docker run -d -p 3000:3000 -p 9229:9229 --name nodejs-script-debug 
+
+
+docker stop 5881da2e95f8
+docker stop 83c758fde786 
+docker rm -f 5881da2e95f8
+docker rm -f 83c758fde786
+docker stop d5e07a312357
+docker rm -f d5e07a312357
+docker stop c17bd7f5a662  
+docker rm -f c17bd7f5a662 
+docker stop 160d0340dbb1   
+docker rm -f 160d0340dbb1 
+docker stop 064173d4de9e 
+docker rm -f 064173d4de9e 
+docker run -d \
+  --name debug-container \
+  --restart unless-stopped \
+  --memory="512m" \
+  --memory-swap="1g" \
+  --cpus="1.0" \
+  -p 3000:3000 \
+  -p 9229:9229 \
+  -e NODE_ENV=production \
+  -e SERVICE_IDENTITY=my-container-nodejs \
+  debug-node-app:v2
+
+
+
+
+  docker run -d \
+  --name express-identity-with-wget \
+  --restart unless-stopped \
+  -p 3000:3000 \
+  -p 9229:9229 \
+  -e NODE_ENV=production \
+  -e SERVICE_IDENTITY=my-container-nodejs \
+  awsemc1980/express-identity-with-wget
+
+
+
+
+
+  aws ecs list-tasks --cluster demo-cluster-990878ee --service-name ECS_service-ecs-service-node-990878ee  --query 'taskArns[*]' --output text
+
+
+  docker exec a3279c7ca5bc find / -type f -name "*.sh" 2>/dev/null
+
+  docker exec -it 13ee8807d419 /bin/sh
+
+docker cp 83b1c6e99ad6:/usr/local/bin/discover_containers.sh /tmp/discover_containers.sh
+
+
+ docker exec 83b1c6e99ad6 cat /etc/nginx/conf.d/upstream.conf:
+  docker exec 13ee8807d419 find / -type f -name "*.conf" 2>/dev/null
+
+docker stop 1db9d5305d55
+  docker run -d \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -p 80:80 \
+  awsemc1980/my_custom_nginx_image1:v5
+
+
+  docker exec awsemc1980/express-identity-with-wgetv2:latest find / -type f -name "*.js" 2>/dev/null
+
+
+  docker exec a3279c7ca5bc sh -c 'cat > /etc/nginx/conf.d/upstream.conf << EOF
+upstream nodejs_backend {
+    server 172.17.0.2:3000 weight=1;
+    server 172.17.0.3:3000 weight=1;
+    least_conn;
+}
+
+server {
+    listen 80;
+    server_name _;
+
+    error_log /var/log/nginx/error.log debug;
+    access_log /var/log/nginx/access.log combined;
+
+    location / {
+        proxy_pass http://nodejs_backend;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        add_header X-Upstream $upstream_addr always;  # This will show which server handled the request
+        proxy_next_upstream error timeout http_500;
+
+        # Disable caching
+        proxy_cache off;
+        proxy_buffering off;
+    }
+}
+EOF'
+
+
+
+
+docker exec 52f1a1be14ce sh -c 'cat > /usr/local/bin/discover_containers.sh << "EOF"
+#!/bin/bash
+set -x
+
+# Set default values
+NODEJS_SERVICE_NAME="${NODEJS_SERVICE_NAME:-nodejs-service}"
+DISCOVERY_INTERVAL="${DISCOVERY_INTERVAL:-30}"
+TEMP_CONFIG_PATH="/etc/nginx/conf.d/upstream.conf"
+SERVICE_LABEL="${SERVICE_LABEL:-service=nodejs}"
+
+# Function to log messages
+log() {
+    echo "[$(date +'%Y-%m-%d %H:%M:%S')] $*" >&2
+    echo "[$(date +'%Y-%m-%d %H:%M:%S')] $*" >> /var/log/discover_containers.log
+}
+
+discover_containers() {
+    log "Starting container discovery process"
+
+    # Discover Docker containers with specific label
+    CONTAINERS=$(docker ps -q --filter "label=${SERVICE_LABEL}")
+
+    if [ -z "$CONTAINERS" ]; then
+        log "No containers found with label ${SERVICE_LABEL}"
+        create_fallback_config
+        return
+    }
+
+    {
+        echo "# Auto-generated upstream configuration"
+        echo "upstream nodejs_backend {"
+
+        for container in $CONTAINERS; do
+            # Get container's IP address and ECS task info
+            CONTAINER_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$container")
+            CONTAINER_ID=$(docker inspect -f '{{.Config.Hostname}}' "$container")
+            TASK_ARN=$(docker inspect -f '{{index .Config.Labels "com.amazonaws.ecs.task-arn"}}' "$container")
+            
+            if [ -n "$CONTAINER_IP" ]; then
+                log "Adding backend: ${CONTAINER_IP}:3000 (Container: ${CONTAINER_ID}, Task: ${TASK_ARN})"
+                echo "    server ${CONTAINER_IP}:3000 max_fails=3 fail_timeout=30s;"
+            fi
+        done
+
+        echo "    least_conn;"
+        echo "    keepalive 32;"
+        echo "}"
+
+        generate_server_config
+    } > "$TEMP_CONFIG_PATH"
+
+    # Log the generated configuration
+    log "Generated Nginx configuration:"
+    cat "$TEMP_CONFIG_PATH" >> /var/log/discover_containers.log
+
+    # Test and reload nginx
+    if nginx -t; then
+        log "Nginx configuration test PASSED"
+        nginx -s reload
+        log "Nginx configuration RELOADED"
+    else
+        log "ERROR: Nginx configuration test FAILED"
+        nginx -t >> /var/log/discover_containers.log
+    fi
+}
+
+generate_server_config() {
+    echo "server {"
+    echo "    listen 80;"
+    echo "    server_name _;"
+
+    echo "    # Enable error logging"
+    echo "    error_log /var/log/nginx/error.log debug;"
+    echo "    access_log /var/log/nginx/access.log combined buffer=512k;"
+
+    echo "    location = /health {"
+    echo "        access_log off;"
+    echo "        add_header Content-Type text/plain;"
+    echo "        return 200 'healthy';"
+    echo "    }"
+
+    echo "    location / {"
+    echo "        proxy_pass http://nodejs_backend/;"
+    echo "        proxy_http_version 1.1;"
+    echo "        proxy_set_header Connection '';"
+    echo "        proxy_set_header Host \$host;"
+    echo "        proxy_set_header X-Real-IP \$remote_addr;"
+    echo "        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;"
+    echo "        proxy_set_header X-Forwarded-Proto \$scheme;"
+    echo "        add_header X-Upstream \$upstream_addr;"
+    echo "        add_header X-Container-ID \$upstream_http_x_container_id;"
+        
+    echo "        proxy_next_upstream error timeout http_500;"
+    echo "        proxy_next_upstream_tries 3;"
+    echo "        proxy_next_upstream_timeout 10s;"
+    echo "        proxy_connect_timeout 5s;"
+    echo "        proxy_send_timeout 5s;"
+    echo "        proxy_read_timeout 5s;"
+    echo "        proxy_buffers 8 16k;"
+    echo "        proxy_buffer_size 32k;"
+    echo "    }"
+    echo "}"
+}
+
+create_fallback_config() {
+    {
+        echo "# Fallback configuration - No backends available"
+        echo "upstream nodejs_backend {"
+        echo "    server 127.0.0.1:8080 down; # Placeholder server"
+        echo "}"
+
+        echo "server {"
+        echo "    listen 80;"
+        echo "    server_name _;"
+
+        echo "    location = /health {"
+        echo "        access_log off;"
+        echo "        add_header Content-Type text/plain;"
+        echo "        return 200 'healthy';"
+        echo "    }"
+
+        echo "    location / {"
+        echo "        return 503 'Service is initializing...';"
+        echo "    }"
+        echo "}"
+    } > "$TEMP_CONFIG_PATH"
+}
+
+# Handle signals
+trap 'log "Received SIGTERM, exiting..."; exit 0' SIGTERM
+trap 'log "Received SIGINT, exiting..."; exit 0' SIGINT
+
+# Main loop
+while true; do
+    discover_containers
+    log "Sleeping for ${DISCOVERY_INTERVAL} seconds"
+    sleep "$DISCOVERY_INTERVAL"
+done
+EOF'
+
+
+52f1a1be14ce 
+
+
+ docker inspect  -format '{{.Config.Labels}}'
+ 
+docker inspect 7b534a1ab714 -format '{{.Config.Labels}}'
+
+docker inspect a15009c09924 --format '{{.Config.Labels}}'
+
+docker exec -it bddd7b9cb698 /bin/sh
+
+
+docker exec de0b7d9e804a cat /etc/nginx/conf.d/upstream.conf
+
+docker exec 4fdf5bff4c65  tail -f /var/log/supervisor/discovery.log
+
+docker exec -it 780ea6b84664 /bin/sh
+
+
+
+
+
+
+
+
+
+
+
+
+#!/bin/bash
+
+AWS_REGION="us-east-1"
+CLUSTER_NAME="demo-cluster-91c0f525"
+SERVICE_NAME="ECS_service-ecs-service-node-91c0f525"
+DISCOVERY_INTERVAL=30
+TEMP_CONFIG_PATH="/etc/nginx/conf.d/upstream.conf"
+LOG_FILE="/var/log/discover_containers.log"
+
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a $LOG_FILE
+}
+
+discover_containers() {
+    log "Starting ECS container discovery process"
+    
+    # Get list of tasks
+    TASK_ARNS=$(aws ecs list-tasks \
+        --cluster $CLUSTER_NAME \
+        --service-name $SERVICE_NAME \
+        --region $AWS_REGION \
+        --output json | jq -r '.taskArns[]')
+
+    if [ -z "$TASK_ARNS" ]; then
+        log "No tasks found for service $SERVICE_NAME"
+        return 1
+    }
+
+    # Start nginx config
+    cat > "$TEMP_CONFIG_PATH" << EOF
+# Auto-generated upstream configuration
+upstream nodejs_backend {
+    least_conn;
+    keepalive 32;
+EOF
+
+    # Process each task
+    for TASK_ARN in $TASK_ARNS; do
+        log "Processing task ARN: $TASK_ARN"
+        
+        TASK_INFO=$(aws ecs describe-tasks \
+            --cluster $CLUSTER_NAME \
+            --tasks $TASK_ARN \
+            --region $AWS_REGION)
+        
+        # Extract container info directly from task
+        CONTAINER_INFO=$(echo "$TASK_INFO" | jq -r '.tasks[0].containers[] | select(.name | contains("nodejs"))')
+        HOST_PORT=$(echo "$CONTAINER_INFO" | jq -r
+
+
+
+
+
+
+
+
+
+        !/bin/bash
+set -x
+
+# Set default values
+NODEJS_SERVICE_NAME="${NODEJS_SERVICE_NAME:-nodejs-service}"
+DISCOVERY_INTERVAL="${DISCOVERY_INTERVAL:-30}"
+TEMP_CONFIG_PATH="/etc/nginx/conf.d/upstream.conf"
+SERVICE_LABEL="${SERVICE_LABEL:-service=nodejs}"
+
+# Function to log messages
+log() {
+    echo "[$(date +'%Y-%m-%d %H:%M:%S')] $*" >&2
+    echo "[$(date +'%Y-%m-%d %H:%M:%S')] $*" >> /var/log/discover_containers.log
+}
+
+discover_containers() {
+    log "Starting container discovery process"
+
+    # Discover Docker containers with specific label
+    CONTAINERS=$(docker ps -q --filter "label=${SERVICE_LABEL}")
+
+    if [ -z "$CONTAINERS" ]; then
+        log "No containers found with label ${SERVICE_LABEL}"
+        create_fallback_config
+        return
+    fi
+
+    {
+        echo "# Auto-generated upstream configuration"
+        echo "upstream nodejs_backend {"
+
+        for container in $CONTAINERS; do
+            # Get container's IP address
+            CONTAINER_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$container")
+
+            if [ -n "$CONTAINER_IP" ]; then
+                log "Adding backend: ${CONTAINER_IP}:3000"
+                echo "    server ${CONTAINER_IP}:3000 max_fails=3 fail_timeout=30s;"
+            fi
+        done
+
+        echo "    least_conn;"
+        echo "    keepalive 32;"
+        echo "}"
+
+        generate_server_config
+    } > "$TEMP_CONFIG_PATH"
+
+    # Log the generated configuration
+    log "Generated Nginx configuration:"
+    cat "$TEMP_CONFIG_PATH" >> /var/log/discover_containers.log
+
+    # Test and reload nginx
+    if nginx -t; then
+        log "Nginx configuration test PASSED"
+        nginx -s reload
+        log "Nginx configuration RELOADED"
+    else
+        log "ERROR: Nginx configuration test FAILED"
+        nginx -t >> /var/log/discover_containers.log
+    fi
+}
+
+generate_server_config() {
+    echo "server {"
+    echo "    listen 80;"
+    echo "    server_name _;"
+
+    echo "    # Enable error logging"
+    echo "    error_log /var/log/nginx/error.log debug;"
+    echo "    access_log /var/log/nginx/access.log combined;"
+
+    echo "    location = /health {"
+    echo "        access_log off;"
+    echo "        add_header Content-Type text/plain;"
+    echo "        return 200 'healthy';"
+    echo "    }"
+
+    echo "    location / {"
+    echo "        proxy_pass http://nodejs_backend/;"
+    echo "        proxy_http_version 1.1;"
+    echo "        proxy_set_header Connection '';"
+    echo "        proxy_set_header Host \$host;"
+    echo "        proxy_set_header X-Real-IP \$remote_addr;"
+    echo "        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;"
+    echo "        proxy_set_header X-Forwarded-Proto \$scheme;"
+    echo "        proxy_next_upstream error timeout http_500;"
+    echo "        proxy_next_upstream_tries 3;"
+    echo "        proxy_next_upstream_timeout 10s;"
+    echo "        proxy_connect_timeout 5s;"
+    echo "        proxy_send_timeout 5s;"
+    echo "        proxy_read_timeout 5s;"
+    echo "        proxy_buffers 8 16k;"
+    echo "        proxy_buffer_size 32k;"
+    echo "    }"
+    echo "}"
+}
+
+create_fallback_config() {
+    {
+        echo "# Fallback configuration - No backends available"
+        echo "upstream nodejs_backend {"
+        echo "    server 127.0.0.1:8080 down; # Placeholder server"
+        echo "}"
+
+        echo "server {"
+        echo "    listen 80;"
+        echo "    server_name _;"
+
+        echo "    location = /health {"
+        echo "        access_log off;"
+        echo "        add_header Content-Type text/plain;"
+        echo "        return 200 'healthy';"
+        echo "    }"
+
+        echo "    location / {"
+        echo "        return 503 'Service Temporarily Unavailable';"
+        echo "    }"
+        echo "}"
+    } > "$TEMP_CONFIG_PATH"
+}
+
+# Handle signals
+trap 'log "Received SIGTERM, exiting..."; exit 0' SIGTERM
+trap 'log "Received SIGINT, exiting..."; exit 0' SIGINT
+
+# Main loop
+while true; do
+    discover_containers
+    log "Sleeping for ${DISCOVERY_INTERVAL} seconds"
+    sleep "$DISCOVERY_INTERVAL"
+done
+/usr/local/bin #
+
+
+
+
+{
+  "name": "node-service",
+  "version": "1.0.0",
+  "main": "server.js",
+  "dependencies": {
+    "express": "^4.18.2"
+  },
+  "scripts": {
+    "start": "node server.js"
+  }
+}
+
+
+
+docker exec ac2a3afef2c2 find / -type f -name "*.conf" 2>/dev/null
+
+docker exec -it ac2a3afef2c2 cat /etc/nginx/conf.d/<your_conf_file>.conf
+
+
+
+
+00987-98-098098=098-07-987987987(*&(*&^*&^*&^^%&^*&$^%$^%$^$$#%$#%@$#@#^%$&^(*^*&^*&&^%*%^$^$#%$#%$#%$#$#%$#%$#%$#%#%$#^$^#^$#$#%$#%$#%$#%$#^$#^#^$#$#$%#$#$#$#^$#$%#$%#$#$#$#$%#$%#$%#$#$#$#$#)))
+
+
+
+
+#!/bin/bash
+set -eu # Exit on error and unset variable
+set -x # Enable command tracing
+
+# Set default values
+NODEJS_SERVICE_NAME="${NODEJS_SERVICE_NAME:-nodejs-service}"
+DISCOVERY_INTERVAL="${DISCOVERY_INTERVAL:-30}"
+TEMP_CONFIG_PATH="/etc/nginx/conf.d/upstream.conf"
+SERVICE_LABEL="${SERVICE_LABEL:-service=nodejs}"
+NODE_PORT="${NODE_PORT:-3000}" # Make the port configurable
+
+log() {
+    timestamp=$(date +'%Y-%m-%d %H:%M:%S')
+    echo "[$timestamp] $*" >&2
+    echo "[$timestamp] $*" >> /var/log/discover_containers.log
+}
+
+
+
+# List tasks
+aws ecs list-tasks --cluster demo-cluster-25c8be7b
+
+# Check environment variables in a running container
+aws ecs execute-command --cluster demo-cluster-25c8be7b \
+    --task arn:aws:ecs:us-east-1:010575877879:task/demo-cluster-25c8be7b/9e1f421f46364106b0fa10c1e4067864 \
+    --container <container-name> \
+    --command "printenv TASK_INDEX"
+
+
+    docker exec ce924c4a6490 env | grep TASK_INDEX
+
+
+
+    aws ecs describe-tasks \
+    --cluster demo-cluster-de3605e7 \
+    --tasks arn:aws:ecs:us-east-1:010575877879:task/demo-cluster-de3605e7/1dd89fac78ae49918b498b823f60456e \
+            arn:aws:ecs:us-east-1:010575877879:task/demo-cluster-de3605e7/38dfbb1e388b4bf18fd36a0d5996d8ab \
+            arn:aws:ecs:us-east-1:010575877879:task/demo-cluster-de3605e7/9670bbdced3141d4865e25596d853271 \
+    | jq '.tasks[].containers[].environment'

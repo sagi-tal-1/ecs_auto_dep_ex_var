@@ -58,36 +58,15 @@ EOF
 data "aws_availability_zones" "available" {
   state = "available"
 
+
+
 }
-# S3 bucket for nginx configuration
-resource "aws_s3_bucket" "nginx_config" {
-  bucket        = "nginx-config-${random_id.unique.hex}"
-  force_destroy = true # This allows Terraform to delete the bucket even if it contains objects
-}
-
-resource "aws_s3_bucket_versioning" "nginx_config" {
-  bucket = aws_s3_bucket.nginx_config.id
-  versioning_configuration {
-    status = "Enabled"
-  }
-}
-
-# Add lifecycle rule to clean up old versions
-resource "aws_s3_bucket_lifecycle_configuration" "nginx_config" {
-  bucket = aws_s3_bucket.nginx_config.id
-
-  rule {
-    id     = "cleanup_old_versions"
-    status = "Enabled"
-
-    noncurrent_version_expiration {
-      noncurrent_days = 1
-    }
-
-    expiration {
-      expired_object_delete_marker = true
-    }
-  }
+module "backend" {
+  source = "./modules/backend"
+  aws_region = var.aws_region
+  environment  = var.environment
+  project_name = var.project_name
+  table_name   = "${var.project_name}-${var.environment}-locks"
 }
 
 # Networking -----------------------
@@ -249,7 +228,7 @@ module "ecs_task_role" {
   source                   = "./modules/ecs_task_role"
   task_role_name_prefix    = "demo-ecs-task-role-${random_id.unique.hex}"
   exec_role_name_prefix    = "demo-ecs-exec-role-${random_id.unique.hex}"
-  nginx_config_bucket_name = aws_s3_bucket.nginx_config.id
+  nginx_config_bucket_name = module.backend.s3_bucket_name
 
 }
 
@@ -371,7 +350,8 @@ module "ecs_asg" {
   desired_capacity   = 1
   launch_template_id = module.ecs_launch_template.launch_template_id
   instance_name      = "demo-ecs-instance-${random_id.unique.hex}"
-
+  az_a_subnet_ids    = [module.vpc.private_subnet_ids[0]]  # Subnet in us-east-1a
+  az_b_subnet_ids    = [module.vpc.private_subnet_ids[1]]  # Subnet in us-east-1b
 
   depends_on = [module.ecs_launch_template, null_resource.cluster_ready]
 
@@ -408,8 +388,17 @@ locals {
   
   service_config = {
     cluster_name = module.ecs_cluster.cluster_name
-    service_name = "${var.service_name}-ecs-Nservice-${random_id.unique.hex}"
+    service_name = "${var.service_name}-NODE-${random_id.unique.hex}"
   }
+}
+
+
+module "service_discovery" {
+  source = "./modules/service_discovery"
+  service_name = "${var.service_name}-discovery"
+  environment  = "dev"
+  vpc_id = module.vpc.vpc_id
+ 
 }
 
 
@@ -418,7 +407,7 @@ module "ecs_task_definition_node"  {
   source                    = "./modules/ecs_task_definition_node"
   family                    = "node-task-${random_id.unique.hex}"
   container_name            = local.container_name_nodejs
-  docker_image              = "awsemc1980/my-node-service:v1"
+  docker_image              = "awsemc1980/custom-node-service:v2"
   log_group_name            = module.log_group.cloudwatch_log_group_name
   log_stream_prefix         = "ecs"
   cpu                       = 128
@@ -428,9 +417,12 @@ module "ecs_task_definition_node"  {
   execution_role_arn        = module.ecs_task_role.ecs_task_role_arn
   log_region                = var.aws_region
   log_group_arn             = module.log_group.cloudwatch_log_group_arn
-  
-
-
+# cluster_id          = module.ecs_cluster.ecs_cluster_id
+  service_discovery_namespace = module.service_discovery.namespace_id
+  service_discovery_service_name    = module.service_discovery.service_discovery_service_name
+  cluster_name             = module.ecs_cluster.cluster_name
+  service_name = "${var.service_name}-s-node"
+  environment= "nodejs-app"
 
   depends_on = [module.log_group]
 }
@@ -438,14 +430,13 @@ module "ecs_task_definition_node"  {
 module "ecs_service_nodes" {
   source = "./modules/ecs_service_nodes"
 
-  service_name        = "${var.service_name}-ecs-service-node-${random_id.unique.hex}"
+  service_name        = "${var.service_name}-s-node"
   cluster_id          = module.ecs_cluster.ecs_cluster_id
   container_name      = local.container_name_nodejs
-  task_definition_arn = module.ecs_task_definition_node.task_definition_arn # For the first task definition
-
-  desired_count          = 2
+  task_definition_arn = module.ecs_task_definition_node.task_definition_arn
+  # service_discovery_arn = module.service_discovery.service_arn
+  desired_count = var.task_count
   capacity_provider_name = module.ecs_capacity_provider.capacity_provider_name
-
   nodejs_target_group_arn = module.alb.nodejs_ecs_target_group_arn
   nodejs_port             = 3000
   
@@ -454,10 +445,13 @@ module "ecs_service_nodes" {
   source_security_group_id     = module.alb.nodejs_ecs_security_group_id
   security_group_id        = module.ecs_node_sg.security_group_id
   
-  
+  service_discovery_service_arn = module.service_discovery.service_discovery_service_arn
+
+
+  # ecs_tasks_capacity_provider_name = module.ecs_capacity_provider.capacity_provider_arn
 
   service_number = "001" # or use a variable if multiple services
-  environment    = "Dev"
+  environment    = "dev"
 
   tags = {
     Environment = var.environment
@@ -503,7 +497,7 @@ module "ecs_task_definition" {
   source                    = "./modules/ecs_task_definition"
   family                    = "nginx-task-${random_id.unique.hex}"
   container_name            = local.container_name_nginx
-  docker_image              = "awsemc1980/my_custom_nginx_image1:v5"
+  docker_image              = "awsemc1980/my_custom_nginx_image1:v7"
   log_group_name            = module.log_group.cloudwatch_log_group_name
   log_stream_prefix         = "ecs"
   cpu                       = 256
@@ -790,7 +784,7 @@ module "ecs_service_auto_scaling" {
   target_cpu_value    = 80
   target_memory_value = 80
   
-  depends_on = [module.ecs_service, module.ecs_task_definition, module.alb, module.ecs_service_nodes, module.ecs_task_role]
+  depends_on = [module.ecs_service, module.ecs_task_definition, module.alb, module.ecs_service_nodes, module.ecs_task_role, module.ecs_asg ]
 }
 
 # Detect if we're running terraform destroy
@@ -806,9 +800,9 @@ module "destroy" {
   cluster_name = module.ecs_cluster.cluster_name
   service_name = module.ecs_service.service_name
   service_name_nodes = module.ecs_service_nodes.service_name
-  asg_name     = module.ecs_asg.asg_name
+  asg_names     = module.ecs_asg.all_asg_names
   task_family  = module.ecs_task_definition.family
-
+  all_instance_ids = module.ecs_asg.all_instance_ids
   depends_on = [
     module.ecs_service_auto_scaling,
     module.ecs_service,

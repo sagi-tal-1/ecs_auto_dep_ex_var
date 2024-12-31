@@ -1,9 +1,21 @@
 # modules/s3/main.tf
 
 # S3 Bucket
-resource "aws_s3_bucket" "nginx_config" {
+resource "aws_s3_bucket" "backend" {
   bucket = var.bucket_name
+  versioning {
+    enabled = true
+  }
+  aws_s3_bucket_server_side_encryption_configuration {
+    rule {
+      apply_server_side_encryption_by_default {
+        sse_algorithm = "AES256"  
+      }
+    }
+  }
 }
+
+
 
 # Enable versioning
 resource "aws_s3_bucket_versioning" "nginx_config" {

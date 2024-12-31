@@ -46,3 +46,12 @@ variable "enabled" {
 #      type        = string
 #    }
 
+variable "az_a_subnet_ids" {
+  description = "Subnet IDs in availability zone A for ECS tasks"
+  type        = list(string)
+}
+
+variable "az_b_subnet_ids" {
+  description = "Subnet IDs in availability zone B for load balancer"
+  type        = list(string)
+}

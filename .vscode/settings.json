@@ -1,3 +1,4 @@
 {
-  "CodeGPT.apiKey": "DeepSeek"
+  "CodeGPT.apiKey": "DeepSeek",
+  "DockerRun.DisableDockerrc": true
 }

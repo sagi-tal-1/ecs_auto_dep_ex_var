@@ -8,9 +8,9 @@ variable "service_name" {
   type        = string
 }
 
-variable "asg_name" {
+variable "asg_names" {
   description = "Name of the Auto Scaling Group"
-  type        = string
+    type        = list(string)
 }
 
 variable "task_family" {
@@ -21,4 +21,10 @@ variable "service_name_nodes" {
   description = "Name of the ECS service for nodes"
   type        = string
   default     = null
+}
+
+
+variable "all_instance_ids" {
+  description = "Instance IDs of all instances in the Auto Scaling Groups"
+  type        = list(string)
 }

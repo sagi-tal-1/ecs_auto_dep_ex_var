@@ -27,3 +27,13 @@ output "private_subnet_cidrs" {
   value = aws_subnet.private[*].cidr_block
   description = "List of private subnet CIDRs"
 }
+
+output "private_subnet_a" {
+  description = "Private subnet in AZ A"
+  value = tolist([for subnet in aws_subnet.private : subnet.id if subnet.availability_zone == var.availability_zones[0]])
+}
+
+output "private_subnet_b" {
+  description = "Private subnet in AZ B"
+  value = tolist([for subnet in aws_subnet.private : subnet.id if subnet.availability_zone == var.availability_zones[1]])
+}

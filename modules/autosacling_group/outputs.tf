@@ -15,6 +15,7 @@ output "autoscaling_group_name" {
 
 
 output "asg_name" {
+  description = "Name of the ECS Auto Scaling Group in AZ-A"
   value = aws_autoscaling_group.ecs.name
 }
 
@@ -26,4 +27,15 @@ output "asg_name" {
 output "instance_ids" {
   description = "List of EC2 instance IDs in the Auto Scaling Group"
   value       = data.aws_instances.ecs.ids
+}
+
+# General outputs for both ASGs
+output "all_asg_names" {
+  description = "Names of all Auto Scaling Groups"
+  value       = [aws_autoscaling_group.ecs.name, aws_autoscaling_group.lb.name]
+}
+
+output "all_instance_ids" {
+  description = "Instance IDs of all instances in the Auto Scaling Groups"
+  value       = concat(data.aws_instances.ecs.ids, data.aws_instances.lb.ids)
 }

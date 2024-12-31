@@ -1,0 +1,1433 @@
+# module.ecs_service.aws_ecs_service.app:
+resource "aws_ecs_service" "app" {
+    availability_zone_rebalancing      = "DISABLED"
+    cluster                            = "arn:aws:ecs:us-east-1:010575877879:cluster/demo-cluster-80daafb4"
+    deployment_maximum_percent         = 200
+    deployment_minimum_healthy_percent = 100
+    desired_count                      = 1
+    enable_ecs_managed_tags            = false
+    enable_execute_command             = false
+    force_new_deployment               = true
+    health_check_grace_period_seconds  = 150
+    iam_role                           = "/aws-service-role/ecs.amazonaws.com/AWSServiceRoleForECS"
+    id                                 = "arn:aws:ecs:us-east-1:010575877879:service/demo-cluster-80daafb4/demo-ecs-Nservice-80daafb4"
+    launch_type                        = [90mnull[0m[0m
+    name                               = "demo-ecs-Nservice-80daafb4"
+    platform_version                   = [90mnull[0m[0m
+    propagate_tags                     = "NONE"
+    scheduling_strategy                = "REPLICA"
+    tags_all                           = {}
+    task_definition                    = "arn:aws:ecs:us-east-1:010575877879:task-definition/nginx-task-80daafb4:1"
+    triggers                           = {}
+    wait_for_steady_state              = true
+
+    capacity_provider_strategy {
+        base              = 1
+        capacity_provider = "demo-capacity-provider-80daafb4"
+        weight            = 100
+    }
+
+    deployment_circuit_breaker {
+        enable   = true
+        rollback = true
+    }
+
+    deployment_controller {
+        type = "ECS"
+    }
+
+    load_balancer {
+        container_name   = "my-container-nginx"
+        container_port   = 80
+        elb_name         = [90mnull[0m[0m
+        target_group_arn = "arn:aws:elasticloadbalancing:us-east-1:010575877879:targetgroup/tg-ecs-demo-alb-80daafb4-9062/8ceb487a42556c14"
+    }
+
+    ordered_placement_strategy {
+        field = "attribute:ecs.availability-zone"
+        type  = "spread"
+    }
+    ordered_placement_strategy {
+        field = "instanceId"
+        type  = "spread"
+    }
+
+    timeouts {
+        create = "30m"
+        delete = "30m"
+        update = "30m"
+    }
+}
+# module.ecs_cluster.aws_ecs_cluster.main:
+resource "aws_ecs_cluster" "main" {
+    arn      = "arn:aws:ecs:us-east-1:010575877879:cluster/demo-cluster-80daafb4"
+    id       = "arn:aws:ecs:us-east-1:010575877879:cluster/demo-cluster-80daafb4"
+    name     = "demo-cluster-80daafb4"
+    tags_all = {}
+
+    setting {
+        name  = "containerInsights"
+        value = "disabled"
+    }
+}
+# module.ecs_service_nodes.aws_ecs_service.nodejs:
+resource "aws_ecs_service" "nodejs" {
+    availability_zone_rebalancing      = "DISABLED"
+    cluster                            = "demo-cluster-80daafb4"
+    deployment_maximum_percent         = 200
+    deployment_minimum_healthy_percent = 100
+    desired_count                      = 2
+    enable_ecs_managed_tags            = true
+    enable_execute_command             = true
+    force_new_deployment               = true
+    health_check_grace_period_seconds  = 120
+    iam_role                           = "/aws-service-role/ecs.amazonaws.com/AWSServiceRoleForECS"
+    id                                 = "arn:aws:ecs:us-east-1:010575877879:service/demo-cluster-80daafb4/ECS-s-node"
+    launch_type                        = "EC2"
+    name                               = "ECS-s-node"
+    platform_version                   = [90mnull[0m[0m
+    propagate_tags                     = "SERVICE"
+    scheduling_strategy                = "REPLICA"
+    tags_all                           = {}
+    task_definition                    = "arn:aws:ecs:us-east-1:010575877879:task-definition/node-task-80daafb4:1"
+    triggers                           = {}
+    wait_for_steady_state              = false
+
+    deployment_circuit_breaker {
+        enable   = true
+        rollback = true
+    }
+
+    deployment_controller {
+        type = "ECS"
+    }
+
+    load_balancer {
+        container_name   = "my-container-nodejs"
+        container_port   = 3000
+        elb_name         = [90mnull[0m[0m
+        target_group_arn = "arn:aws:elasticloadbalancing:us-east-1:010575877879:targetgroup/tg-nodejs-demo-alb-80daafb4-9062/9810792c4221ca70"
+    }
+
+    ordered_placement_strategy {
+        field = "cpu"
+        type  = "binpack"
+    }
+
+    placement_constraints {
+        expression = "attribute:ecs.availability-zone == us-east-1a"
+        type       = "memberOf"
+    }
+
+    service_registries {
+        container_name = "my-container-nodejs"
+        container_port = 3000
+        port           = 0
+        registry_arn   = "arn:aws:servicediscovery:us-east-1:010575877879:service/srv-oxyfeqhhgo3lr2sw"
+    }
+
+    timeouts {
+        create = "30m"
+        delete = "30m"
+        update = "30m"
+    }
+}
+# module.ecs_task_definition_node.aws_ecs_task_definition.app:
+resource "aws_ecs_task_definition" "app" {
+    arn                      = "arn:aws:ecs:us-east-1:010575877879:task-definition/node-task-80daafb4:1"
+    arn_without_revision     = "arn:aws:ecs:us-east-1:010575877879:task-definition/node-task-80daafb4"
+    container_definitions    = jsonencode(
+        [
+            {
+                cpu              = 128
+                dockerLabels     = {
+                    "app.service.identity"  = "my-container-nodejs-#{container:DockerId}"
+                    container-name          = "my-container-nodejs"
+                    "custom.container-name" = "#{aws:TaskARN}"
+                    service                 = "nodejs"
+                    task-definition-family  = "node-task-80daafb4"
+                }
+                environment      = [
+                    {
+                        name  = "AWS_REGION"
+                        value = "us-east-1"
+                    },
+                    {
+                        name  = "CONTAINER_ID"
+                        value = "#{container:DockerId}"
+                    },
+                    {
+                        name  = "DISCOVERY_INTERVAL"
+                        value = "30"
+                    },
+                    {
+                        name  = "ECS_CLUSTER"
+                        value = "demo-cluster-80daafb4"
+                    },
+                    {
+                        name  = "ECS_CONTAINER_METADATA_URI"
+                        value = "#{ECS_CONTAINER_METADATA_URI_V4}"
+                    },
+                    {
+                        name  = "ECS_CONTAINER_NAME"
+                        value = "my-container-nodejs"
+                    },
+                    {
+                        name  = "ECS_SERVICE_NAME"
+                        value = "ECS-s-node"
+                    },
+                    {
+                        name  = "PORT"
+                        value = "3000"
+                    },
+                    {
+                        name  = "SERVICE_DISCOVERY_NAME"
+                        value = "ECS-discovery.ns-ejamhy7gif2zfjpa"
+                    },
+                    {
+                        name  = "SERVICE_IDENTITY"
+                        value = "my-container-nodejs"
+                    },
+                    {
+                        name  = "TASK_ID"
+                        value = "#{aws:TaskARN}"
+                    },
+                    {
+                        name  = "TASK_INSTANCE"
+                        value = "#{container:DockerId}"
+                    },
+                ]
+                essential        = true
+                healthCheck      = {
+                    command     = [
+                        "CMD-SHELL",
+                        "wget -q --spider http://localhost:3000/health || exit 1",
+                    ]
+                    interval    = 30
+                    retries     = 3
+                    startPeriod = 60
+                    timeout     = 5
+                }
+                image            = "awsemc1980/enhanced-node-appv2:v3"
+                logConfiguration = {
+                    logDriver = "awslogs"
+                    options   = {
+                        awslogs-create-group  = "true"
+                        awslogs-group         = "log_group-80daafb4"
+                        awslogs-region        = "us-east-1"
+                        awslogs-stream-prefix = "ecs"
+                        max-buffer-size       = "4m"
+                        mode                  = "non-blocking"
+                    }
+                }
+                memory           = 128
+                mountPoints      = [
+                    {
+                        containerPath = "/var/log/nginx"
+                        readOnly      = false
+                        sourceVolume  = "nginx-logs"
+                    },
+                ]
+                name             = "my-container-nodejs"
+                portMappings     = [
+                    {
+                        containerPort = 3000
+                        hostPort      = 0
+                        protocol      = "tcp"
+                    },
+                ]
+                systemControls   = []
+                volumesFrom      = []
+            },
+        ]
+    )
+    cpu                      = "128"
+    execution_role_arn       = "arn:aws:iam::010575877879:role/demo-ecs-task-role-80daafb420241228150305980800000005"
+    family                   = "node-task-80daafb4"
+    id                       = "node-task-80daafb4"
+    ipc_mode                 = [90mnull[0m[0m
+    memory                   = "128"
+    network_mode             = "bridge"
+    pid_mode                 = [90mnull[0m[0m
+    requires_compatibilities = [
+        "EC2",
+    ]
+    revision                 = 1
+    skip_destroy             = false
+    tags                     = {
+        "Environment" = "nodejs-app"
+        "Managed-by"  = "terraform"
+        "Service"     = "my-container-nodejs"
+    }
+    tags_all                 = {
+        "Environment" = "nodejs-app"
+        "Managed-by"  = "terraform"
+        "Service"     = "my-container-nodejs"
+    }
+    task_role_arn            = "arn:aws:iam::010575877879:role/demo-ecs-exec-role-80daafb420241228150304891800000001"
+    track_latest             = false
+
+    volume {
+        configure_at_launch = false
+        host_path           = "/var/log/ecs/nginx"
+        name                = "nginx-logs"
+    }
+}
+# module.ecs_task_definition.aws_ecs_task_definition.app:
+resource "aws_ecs_task_definition" "app" {
+    arn                      = "arn:aws:ecs:us-east-1:010575877879:task-definition/nginx-task-80daafb4:1"
+    arn_without_revision     = "arn:aws:ecs:us-east-1:010575877879:task-definition/nginx-task-80daafb4"
+    container_definitions    = jsonencode(
+        [
+            {
+                cpu              = 256
+                environment      = [
+                    {
+                        name  = "NODEJS_SERVICE_NAME"
+                        value = "ECS-s-node"
+                    },
+                    {
+                        name  = "TASK_INDEX"
+                        value = "b"
+                    },
+                ]
+                essential        = true
+                healthCheck      = {
+                    command     = [
+                        "CMD-SHELL",
+                        "test -r /var/run/docker.sock && curl -f http://localhost/health || exit 1",
+                    ]
+                    interval    = 30
+                    retries     = 3
+                    startPeriod = 60
+                    timeout     = 5
+                }
+                image            = "awsemc1980/my_custom_nginx_image1:v5"
+                logConfiguration = {
+                    logDriver = "awslogs"
+                    options   = {
+                        awslogs-group         = "/ecs/nginx-task-80daafb4"
+                        awslogs-region        = "us-east-1"
+                        awslogs-stream-prefix = "ecs"
+                    }
+                }
+                memory           = 256
+                mountPoints      = [
+                    {
+                        containerPath = "/var/run/docker.sock"
+                        readOnly      = true
+                        sourceVolume  = "docker-sock"
+                    },
+                ]
+                name             = "my-container-nginx"
+                portMappings     = [
+                    {
+                        containerPort = 80
+                        hostPort      = 80
+                        protocol      = "tcp"
+                    },
+                ]
+                systemControls   = []
+                volumesFrom      = []
+            },
+        ]
+    )
+    cpu                      = "256"
+    execution_role_arn       = "arn:aws:iam::010575877879:role/demo-ecs-task-role-80daafb420241228150305980800000005"
+    family                   = "nginx-task-80daafb4"
+    id                       = "nginx-task-80daafb4"
+    ipc_mode                 = [90mnull[0m[0m
+    memory                   = "256"
+    network_mode             = "bridge"
+    pid_mode                 = [90mnull[0m[0m
+    requires_compatibilities = [
+        "EC2",
+    ]
+    revision                 = 1
+    skip_destroy             = false
+    tags_all                 = {}
+    task_role_arn            = "arn:aws:iam::010575877879:role/demo-ecs-exec-role-80daafb420241228150304891800000001"
+    track_latest             = false
+
+    volume {
+        configure_at_launch = false
+        host_path           = "/var/run/docker.sock"
+        name                = "docker-sock"
+    }
+}
+# module.ecs_asg.aws_autoscaling_group.ecs:
+resource "aws_autoscaling_group" "ecs" {
+    arn                              = "arn:aws:autoscaling:us-east-1:010575877879:autoScalingGroup:b2593fc4-c01d-440a-a51d-771f25af97bd:autoScalingGroupName/demo-asg-80daafb4-asg"
+    availability_zones               = [
+        "us-east-1a",
+    ]
+    capacity_rebalance               = true
+    context                          = [90mnull[0m[0m
+    default_cooldown                 = 300
+    default_instance_warmup          = 0
+    desired_capacity                 = 1
+    desired_capacity_type            = [90mnull[0m[0m
+    force_delete                     = false
+    force_delete_warm_pool           = false
+    health_check_grace_period        = 10
+    health_check_type                = "EC2"
+    id                               = "demo-asg-80daafb4-asg"
+    ignore_failed_scaling_activities = false
+    launch_configuration             = [90mnull[0m[0m
+    load_balancers                   = []
+    max_instance_lifetime            = 0
+    max_size                         = 2
+    metrics_granularity              = "1Minute"
+    min_size                         = 1
+    name                             = "demo-asg-80daafb4-asg"
+    name_prefix                      = [90mnull[0m[0m
+    placement_group                  = [90mnull[0m[0m
+    predicted_capacity               = 0
+    protect_from_scale_in            = true
+    service_linked_role_arn          = "arn:aws:iam::010575877879:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling"
+    target_group_arns                = []
+    vpc_zone_identifier              = [
+        "subnet-0aab1c163a2ff7ace",
+    ]
+    wait_for_capacity_timeout        = "10m"
+    warm_pool_size                   = 0
+
+    initial_lifecycle_hook {
+        default_result          = "CONTINUE"
+        heartbeat_timeout       = 300
+        lifecycle_transition    = "autoscaling:EC2_INSTANCE_TERMINATING"
+        name                    = "terminate_hook"
+        notification_metadata   = [90mnull[0m[0m
+        notification_target_arn = [90mnull[0m[0m
+        role_arn                = [90mnull[0m[0m
+    }
+
+    instance_refresh {
+        strategy = "Rolling"
+
+        preferences {
+            auto_rollback                = false
+            checkpoint_delay             = [90mnull[0m[0m
+            instance_warmup              = "300"
+            max_healthy_percentage       = 100
+            min_healthy_percentage       = 50
+            scale_in_protected_instances = "Ignore"
+            skip_matching                = false
+            standby_instances            = "Ignore"
+        }
+    }
+
+    launch_template {
+        id      = "lt-039a2790238c29b74"
+        name    = "launch_template"
+        version = "$Latest"
+    }
+
+    tag {
+        key                 = "AmazonECSManaged"
+        propagate_at_launch = true
+        value               = "true"
+    }
+    tag {
+        key                 = "Name"
+        propagate_at_launch = true
+        value               = "demo-ecs-instance-80daafb4"
+    }
+    tag {
+        key                 = "Purpose"
+        propagate_at_launch = true
+        value               = "ECS"
+    }
+    tag {
+        key                 = "Zone"
+        propagate_at_launch = true
+        value               = "us-east-1a"
+    }
+}
+# module.ecs_service.aws_ecs_service.app:
+resource "aws_ecs_service" "app" {
+    availability_zone_rebalancing      = "DISABLED"
+    cluster                            = "arn:aws:ecs:us-east-1:010575877879:cluster/demo-cluster-80daafb4"
+    deployment_maximum_percent         = 200
+    deployment_minimum_healthy_percent = 100
+    desired_count                      = 1
+    enable_ecs_managed_tags            = false
+    enable_execute_command             = false
+    force_new_deployment               = true
+    health_check_grace_period_seconds  = 150
+    iam_role                           = "/aws-service-role/ecs.amazonaws.com/AWSServiceRoleForECS"
+    id                                 = "arn:aws:ecs:us-east-1:010575877879:service/demo-cluster-80daafb4/demo-ecs-Nservice-80daafb4"
+    launch_type                        = [90mnull[0m[0m
+    name                               = "demo-ecs-Nservice-80daafb4"
+    platform_version                   = [90mnull[0m[0m
+    propagate_tags                     = "NONE"
+    scheduling_strategy                = "REPLICA"
+    tags_all                           = {}
+    task_definition                    = "arn:aws:ecs:us-east-1:010575877879:task-definition/nginx-task-80daafb4:1"
+    triggers                           = {}
+    wait_for_steady_state              = true
+
+    capacity_provider_strategy {
+        base              = 1
+        capacity_provider = "demo-capacity-provider-80daafb4"
+        weight            = 100
+    }
+
+    deployment_circuit_breaker {
+        enable   = true
+        rollback = true
+    }
+
+    deployment_controller {
+        type = "ECS"
+    }
+
+    load_balancer {
+        container_name   = "my-container-nginx"
+        container_port   = 80
+        elb_name         = [90mnull[0m[0m
+        target_group_arn = "arn:aws:elasticloadbalancing:us-east-1:010575877879:targetgroup/tg-ecs-demo-alb-80daafb4-9062/8ceb487a42556c14"
+    }
+
+    ordered_placement_strategy {
+        field = "attribute:ecs.availability-zone"
+        type  = "spread"
+    }
+    ordered_placement_strategy {
+        field = "instanceId"
+        type  = "spread"
+    }
+
+    timeouts {
+        create = "30m"
+        delete = "30m"
+        update = "30m"
+    }
+}
+# module.ecs_cluster.aws_ecs_cluster.main:
+resource "aws_ecs_cluster" "main" {
+    arn      = "arn:aws:ecs:us-east-1:010575877879:cluster/demo-cluster-80daafb4"
+    id       = "arn:aws:ecs:us-east-1:010575877879:cluster/demo-cluster-80daafb4"
+    name     = "demo-cluster-80daafb4"
+    tags_all = {}
+
+    setting {
+        name  = "containerInsights"
+        value = "disabled"
+    }
+}
+# module.ecs_service_nodes.aws_ecs_service.nodejs:
+resource "aws_ecs_service" "nodejs" {
+    availability_zone_rebalancing      = "DISABLED"
+    cluster                            = "demo-cluster-80daafb4"
+    deployment_maximum_percent         = 200
+    deployment_minimum_healthy_percent = 100
+    desired_count                      = 2
+    enable_ecs_managed_tags            = true
+    enable_execute_command             = true
+    force_new_deployment               = true
+    health_check_grace_period_seconds  = 120
+    iam_role                           = "/aws-service-role/ecs.amazonaws.com/AWSServiceRoleForECS"
+    id                                 = "arn:aws:ecs:us-east-1:010575877879:service/demo-cluster-80daafb4/ECS-s-node"
+    launch_type                        = "EC2"
+    name                               = "ECS-s-node"
+    platform_version                   = [90mnull[0m[0m
+    propagate_tags                     = "SERVICE"
+    scheduling_strategy                = "REPLICA"
+    tags_all                           = {}
+    task_definition                    = "arn:aws:ecs:us-east-1:010575877879:task-definition/node-task-80daafb4:1"
+    triggers                           = {}
+    wait_for_steady_state              = false
+
+    deployment_circuit_breaker {
+        enable   = true
+        rollback = true
+    }
+
+    deployment_controller {
+        type = "ECS"
+    }
+
+    load_balancer {
+        container_name   = "my-container-nodejs"
+        container_port   = 3000
+        elb_name         = [90mnull[0m[0m
+        target_group_arn = "arn:aws:elasticloadbalancing:us-east-1:010575877879:targetgroup/tg-nodejs-demo-alb-80daafb4-9062/9810792c4221ca70"
+    }
+
+    ordered_placement_strategy {
+        field = "cpu"
+        type  = "binpack"
+    }
+
+    placement_constraints {
+        expression = "attribute:ecs.availability-zone == us-east-1a"
+        type       = "memberOf"
+    }
+
+    service_registries {
+        container_name = "my-container-nodejs"
+        container_port = 3000
+        port           = 0
+        registry_arn   = "arn:aws:servicediscovery:us-east-1:010575877879:service/srv-oxyfeqhhgo3lr2sw"
+    }
+
+    timeouts {
+        create = "30m"
+        delete = "30m"
+        update = "30m"
+    }
+}
+# module.ecs_task_definition_node.aws_ecs_task_definition.app:
+resource "aws_ecs_task_definition" "app" {
+    arn                      = "arn:aws:ecs:us-east-1:010575877879:task-definition/node-task-80daafb4:1"
+    arn_without_revision     = "arn:aws:ecs:us-east-1:010575877879:task-definition/node-task-80daafb4"
+    container_definitions    = jsonencode(
+        [
+            {
+                cpu              = 128
+                dockerLabels     = {
+                    "app.service.identity"  = "my-container-nodejs-#{container:DockerId}"
+                    container-name          = "my-container-nodejs"
+                    "custom.container-name" = "#{aws:TaskARN}"
+                    service                 = "nodejs"
+                    task-definition-family  = "node-task-80daafb4"
+                }
+                environment      = [
+                    {
+                        name  = "AWS_REGION"
+                        value = "us-east-1"
+                    },
+                    {
+                        name  = "CONTAINER_ID"
+                        value = "#{container:DockerId}"
+                    },
+                    {
+                        name  = "DISCOVERY_INTERVAL"
+                        value = "30"
+                    },
+                    {
+                        name  = "ECS_CLUSTER"
+                        value = "demo-cluster-80daafb4"
+                    },
+                    {
+                        name  = "ECS_CONTAINER_METADATA_URI"
+                        value = "#{ECS_CONTAINER_METADATA_URI_V4}"
+                    },
+                    {
+                        name  = "ECS_CONTAINER_NAME"
+                        value = "my-container-nodejs"
+                    },
+                    {
+                        name  = "ECS_SERVICE_NAME"
+                        value = "ECS-s-node"
+                    },
+                    {
+                        name  = "PORT"
+                        value = "3000"
+                    },
+                    {
+                        name  = "SERVICE_DISCOVERY_NAME"
+                        value = "ECS-discovery.ns-ejamhy7gif2zfjpa"
+                    },
+                    {
+                        name  = "SERVICE_IDENTITY"
+                        value = "my-container-nodejs"
+                    },
+                    {
+                        name  = "TASK_ID"
+                        value = "#{aws:TaskARN}"
+                    },
+                    {
+                        name  = "TASK_INSTANCE"
+                        value = "#{container:DockerId}"
+                    },
+                ]
+                essential        = true
+                healthCheck      = {
+                    command     = [
+                        "CMD-SHELL",
+                        "wget -q --spider http://localhost:3000/health || exit 1",
+                    ]
+                    interval    = 30
+                    retries     = 3
+                    startPeriod = 60
+                    timeout     = 5
+                }
+                image            = "awsemc1980/enhanced-node-appv2:v3"
+                logConfiguration = {
+                    logDriver = "awslogs"
+                    options   = {
+                        awslogs-create-group  = "true"
+                        awslogs-group         = "log_group-80daafb4"
+                        awslogs-region        = "us-east-1"
+                        awslogs-stream-prefix = "ecs"
+                        max-buffer-size       = "4m"
+                        mode                  = "non-blocking"
+                    }
+                }
+                memory           = 128
+                mountPoints      = [
+                    {
+                        containerPath = "/var/log/nginx"
+                        readOnly      = false
+                        sourceVolume  = "nginx-logs"
+                    },
+                ]
+                name             = "my-container-nodejs"
+                portMappings     = [
+                    {
+                        containerPort = 3000
+                        hostPort      = 0
+                        protocol      = "tcp"
+                    },
+                ]
+                systemControls   = []
+                volumesFrom      = []
+            },
+        ]
+    )
+    cpu                      = "128"
+    execution_role_arn       = "arn:aws:iam::010575877879:role/demo-ecs-task-role-80daafb420241228150305980800000005"
+    family                   = "node-task-80daafb4"
+    id                       = "node-task-80daafb4"
+    ipc_mode                 = [90mnull[0m[0m
+    memory                   = "128"
+    network_mode             = "bridge"
+    pid_mode                 = [90mnull[0m[0m
+    requires_compatibilities = [
+        "EC2",
+    ]
+    revision                 = 1
+    skip_destroy             = false
+    tags                     = {
+        "Environment" = "nodejs-app"
+        "Managed-by"  = "terraform"
+        "Service"     = "my-container-nodejs"
+    }
+    tags_all                 = {
+        "Environment" = "nodejs-app"
+        "Managed-by"  = "terraform"
+        "Service"     = "my-container-nodejs"
+    }
+    task_role_arn            = "arn:aws:iam::010575877879:role/demo-ecs-exec-role-80daafb420241228150304891800000001"
+    track_latest             = false
+
+    volume {
+        configure_at_launch = false
+        host_path           = "/var/log/ecs/nginx"
+        name                = "nginx-logs"
+    }
+}
+# module.ecs_task_definition.aws_ecs_task_definition.app:
+resource "aws_ecs_task_definition" "app" {
+    arn                      = "arn:aws:ecs:us-east-1:010575877879:task-definition/nginx-task-80daafb4:1"
+    arn_without_revision     = "arn:aws:ecs:us-east-1:010575877879:task-definition/nginx-task-80daafb4"
+    container_definitions    = jsonencode(
+        [
+            {
+                cpu              = 256
+                environment      = [
+                    {
+                        name  = "NODEJS_SERVICE_NAME"
+                        value = "ECS-s-node"
+                    },
+                    {
+                        name  = "TASK_INDEX"
+                        value = "b"
+                    },
+                ]
+                essential        = true
+                healthCheck      = {
+                    command     = [
+                        "CMD-SHELL",
+                        "test -r /var/run/docker.sock && curl -f http://localhost/health || exit 1",
+                    ]
+                    interval    = 30
+                    retries     = 3
+                    startPeriod = 60
+                    timeout     = 5
+                }
+                image            = "awsemc1980/my_custom_nginx_image1:v5"
+                logConfiguration = {
+                    logDriver = "awslogs"
+                    options   = {
+                        awslogs-group         = "/ecs/nginx-task-80daafb4"
+                        awslogs-region        = "us-east-1"
+                        awslogs-stream-prefix = "ecs"
+                    }
+                }
+                memory           = 256
+                mountPoints      = [
+                    {
+                        containerPath = "/var/run/docker.sock"
+                        readOnly      = true
+                        sourceVolume  = "docker-sock"
+                    },
+                ]
+                name             = "my-container-nginx"
+                portMappings     = [
+                    {
+                        containerPort = 80
+                        hostPort      = 80
+                        protocol      = "tcp"
+                    },
+                ]
+                systemControls   = []
+                volumesFrom      = []
+            },
+        ]
+    )
+    cpu                      = "256"
+    execution_role_arn       = "arn:aws:iam::010575877879:role/demo-ecs-task-role-80daafb420241228150305980800000005"
+    family                   = "nginx-task-80daafb4"
+    id                       = "nginx-task-80daafb4"
+    ipc_mode                 = [90mnull[0m[0m
+    memory                   = "256"
+    network_mode             = "bridge"
+    pid_mode                 = [90mnull[0m[0m
+    requires_compatibilities = [
+        "EC2",
+    ]
+    revision                 = 1
+    skip_destroy             = false
+    tags_all                 = {}
+    task_role_arn            = "arn:aws:iam::010575877879:role/demo-ecs-exec-role-80daafb420241228150304891800000001"
+    track_latest             = false
+
+    volume {
+        configure_at_launch = false
+        host_path           = "/var/run/docker.sock"
+        name                = "docker-sock"
+    }
+}
+# module.ecs_asg.aws_autoscaling_group.ecs:
+resource "aws_autoscaling_group" "ecs" {
+    arn                              = "arn:aws:autoscaling:us-east-1:010575877879:autoScalingGroup:b2593fc4-c01d-440a-a51d-771f25af97bd:autoScalingGroupName/demo-asg-80daafb4-asg"
+    availability_zones               = [
+        "us-east-1a",
+    ]
+    capacity_rebalance               = true
+    context                          = [90mnull[0m[0m
+    default_cooldown                 = 300
+    default_instance_warmup          = 0
+    desired_capacity                 = 1
+    desired_capacity_type            = [90mnull[0m[0m
+    force_delete                     = false
+    force_delete_warm_pool           = false
+    health_check_grace_period        = 10
+    health_check_type                = "EC2"
+    id                               = "demo-asg-80daafb4-asg"
+    ignore_failed_scaling_activities = false
+    launch_configuration             = [90mnull[0m[0m
+    load_balancers                   = []
+    max_instance_lifetime            = 0
+    max_size                         = 2
+    metrics_granularity              = "1Minute"
+    min_size                         = 1
+    name                             = "demo-asg-80daafb4-asg"
+    name_prefix                      = [90mnull[0m[0m
+    placement_group                  = [90mnull[0m[0m
+    predicted_capacity               = 0
+    protect_from_scale_in            = true
+    service_linked_role_arn          = "arn:aws:iam::010575877879:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling"
+    target_group_arns                = []
+    vpc_zone_identifier              = [
+        "subnet-0aab1c163a2ff7ace",
+    ]
+    wait_for_capacity_timeout        = "10m"
+    warm_pool_size                   = 0
+
+    initial_lifecycle_hook {
+        default_result          = "CONTINUE"
+        heartbeat_timeout       = 300
+        lifecycle_transition    = "autoscaling:EC2_INSTANCE_TERMINATING"
+        name                    = "terminate_hook"
+        notification_metadata   = [90mnull[0m[0m
+        notification_target_arn = [90mnull[0m[0m
+        role_arn                = [90mnull[0m[0m
+    }
+
+    instance_refresh {
+        strategy = "Rolling"
+
+        preferences {
+            auto_rollback                = false
+            checkpoint_delay             = [90mnull[0m[0m
+            instance_warmup              = "300"
+            max_healthy_percentage       = 100
+            min_healthy_percentage       = 50
+            scale_in_protected_instances = "Ignore"
+            skip_matching                = false
+            standby_instances            = "Ignore"
+        }
+    }
+
+    launch_template {
+        id      = "lt-039a2790238c29b74"
+        name    = "launch_template"
+        version = "$Latest"
+    }
+
+    tag {
+        key                 = "AmazonECSManaged"
+        propagate_at_launch = true
+        value               = "true"
+    }
+    tag {
+        key                 = "Name"
+        propagate_at_launch = true
+        value               = "demo-ecs-instance-80daafb4"
+    }
+    tag {
+        key                 = "Purpose"
+        propagate_at_launch = true
+        value               = "ECS"
+    }
+    tag {
+        key                 = "Zone"
+        propagate_at_launch = true
+        value               = "us-east-1a"
+    }
+}
+# module.ecs_service.aws_ecs_service.app:
+resource "aws_ecs_service" "app" {
+    availability_zone_rebalancing      = "DISABLED"
+    cluster                            = "arn:aws:ecs:us-east-1:010575877879:cluster/demo-cluster-80daafb4"
+    deployment_maximum_percent         = 200
+    deployment_minimum_healthy_percent = 100
+    desired_count                      = 1
+    enable_ecs_managed_tags            = false
+    enable_execute_command             = false
+    force_new_deployment               = true
+    health_check_grace_period_seconds  = 150
+    iam_role                           = "/aws-service-role/ecs.amazonaws.com/AWSServiceRoleForECS"
+    id                                 = "arn:aws:ecs:us-east-1:010575877879:service/demo-cluster-80daafb4/demo-ecs-Nservice-80daafb4"
+    launch_type                        = [90mnull[0m[0m
+    name                               = "demo-ecs-Nservice-80daafb4"
+    platform_version                   = [90mnull[0m[0m
+    propagate_tags                     = "NONE"
+    scheduling_strategy                = "REPLICA"
+    tags_all                           = {}
+    task_definition                    = "arn:aws:ecs:us-east-1:010575877879:task-definition/nginx-task-80daafb4:1"
+    triggers                           = {}
+    wait_for_steady_state              = true
+
+    capacity_provider_strategy {
+        base              = 1
+        capacity_provider = "demo-capacity-provider-80daafb4"
+        weight            = 100
+    }
+
+    deployment_circuit_breaker {
+        enable   = true
+        rollback = true
+    }
+
+    deployment_controller {
+        type = "ECS"
+    }
+
+    load_balancer {
+        container_name   = "my-container-nginx"
+        container_port   = 80
+        elb_name         = [90mnull[0m[0m
+        target_group_arn = "arn:aws:elasticloadbalancing:us-east-1:010575877879:targetgroup/tg-ecs-demo-alb-80daafb4-9062/8ceb487a42556c14"
+    }
+
+    ordered_placement_strategy {
+        field = "attribute:ecs.availability-zone"
+        type  = "spread"
+    }
+    ordered_placement_strategy {
+        field = "instanceId"
+        type  = "spread"
+    }
+
+    timeouts {
+        create = "30m"
+        delete = "30m"
+        update = "30m"
+    }
+}
+# module.ecs_cluster.aws_ecs_cluster.main:
+resource "aws_ecs_cluster" "main" {
+    arn      = "arn:aws:ecs:us-east-1:010575877879:cluster/demo-cluster-80daafb4"
+    id       = "arn:aws:ecs:us-east-1:010575877879:cluster/demo-cluster-80daafb4"
+    name     = "demo-cluster-80daafb4"
+    tags_all = {}
+
+    setting {
+        name  = "containerInsights"
+        value = "disabled"
+    }
+}
+# module.ecs_service_nodes.aws_ecs_service.nodejs:
+resource "aws_ecs_service" "nodejs" {
+    availability_zone_rebalancing      = "DISABLED"
+    cluster                            = "demo-cluster-80daafb4"
+    deployment_maximum_percent         = 200
+    deployment_minimum_healthy_percent = 100
+    desired_count                      = 2
+    enable_ecs_managed_tags            = true
+    enable_execute_command             = true
+    force_new_deployment               = true
+    health_check_grace_period_seconds  = 120
+    iam_role                           = "/aws-service-role/ecs.amazonaws.com/AWSServiceRoleForECS"
+    id                                 = "arn:aws:ecs:us-east-1:010575877879:service/demo-cluster-80daafb4/ECS-s-node"
+    launch_type                        = "EC2"
+    name                               = "ECS-s-node"
+    platform_version                   = [90mnull[0m[0m
+    propagate_tags                     = "SERVICE"
+    scheduling_strategy                = "REPLICA"
+    tags_all                           = {}
+    task_definition                    = "arn:aws:ecs:us-east-1:010575877879:task-definition/node-task-80daafb4:1"
+    triggers                           = {}
+    wait_for_steady_state              = false
+
+    deployment_circuit_breaker {
+        enable   = true
+        rollback = true
+    }
+
+    deployment_controller {
+        type = "ECS"
+    }
+
+    load_balancer {
+        container_name   = "my-container-nodejs"
+        container_port   = 3000
+        elb_name         = [90mnull[0m[0m
+        target_group_arn = "arn:aws:elasticloadbalancing:us-east-1:010575877879:targetgroup/tg-nodejs-demo-alb-80daafb4-9062/9810792c4221ca70"
+    }
+
+    ordered_placement_strategy {
+        field = "cpu"
+        type  = "binpack"
+    }
+
+    placement_constraints {
+        expression = "attribute:ecs.availability-zone == us-east-1a"
+        type       = "memberOf"
+    }
+
+    service_registries {
+        container_name = "my-container-nodejs"
+        container_port = 3000
+        port           = 0
+        registry_arn   = "arn:aws:servicediscovery:us-east-1:010575877879:service/srv-oxyfeqhhgo3lr2sw"
+    }
+
+    timeouts {
+        create = "30m"
+        delete = "30m"
+        update = "30m"
+    }
+}
+# module.ecs_task_definition_node.aws_ecs_task_definition.app:
+resource "aws_ecs_task_definition" "app" {
+    arn                      = "arn:aws:ecs:us-east-1:010575877879:task-definition/node-task-80daafb4:1"
+    arn_without_revision     = "arn:aws:ecs:us-east-1:010575877879:task-definition/node-task-80daafb4"
+    container_definitions    = jsonencode(
+        [
+            {
+                cpu              = 128
+                dockerLabels     = {
+                    "app.service.identity"  = "my-container-nodejs-#{container:DockerId}"
+                    container-name          = "my-container-nodejs"
+                    "custom.container-name" = "#{aws:TaskARN}"
+                    service                 = "nodejs"
+                    task-definition-family  = "node-task-80daafb4"
+                }
+                environment      = [
+                    {
+                        name  = "AWS_REGION"
+                        value = "us-east-1"
+                    },
+                    {
+                        name  = "CONTAINER_ID"
+                        value = "#{container:DockerId}"
+                    },
+                    {
+                        name  = "DISCOVERY_INTERVAL"
+                        value = "30"
+                    },
+                    {
+                        name  = "ECS_CLUSTER"
+                        value = "demo-cluster-80daafb4"
+                    },
+                    {
+                        name  = "ECS_CONTAINER_METADATA_URI"
+                        value = "#{ECS_CONTAINER_METADATA_URI_V4}"
+                    },
+                    {
+                        name  = "ECS_CONTAINER_NAME"
+                        value = "my-container-nodejs"
+                    },
+                    {
+                        name  = "ECS_SERVICE_NAME"
+                        value = "ECS-s-node"
+                    },
+                    {
+                        name  = "PORT"
+                        value = "3000"
+                    },
+                    {
+                        name  = "SERVICE_DISCOVERY_NAME"
+                        value = "ECS-discovery.ns-ejamhy7gif2zfjpa"
+                    },
+                    {
+                        name  = "SERVICE_IDENTITY"
+                        value = "my-container-nodejs"
+                    },
+                    {
+                        name  = "TASK_ID"
+                        value = "#{aws:TaskARN}"
+                    },
+                    {
+                        name  = "TASK_INSTANCE"
+                        value = "#{container:DockerId}"
+                    },
+                ]
+                essential        = true
+                healthCheck      = {
+                    command     = [
+                        "CMD-SHELL",
+                        "wget -q --spider http://localhost:3000/health || exit 1",
+                    ]
+                    interval    = 30
+                    retries     = 3
+                    startPeriod = 60
+                    timeout     = 5
+                }
+                image            = "awsemc1980/enhanced-node-appv2:v3"
+                logConfiguration = {
+                    logDriver = "awslogs"
+                    options   = {
+                        awslogs-create-group  = "true"
+                        awslogs-group         = "log_group-80daafb4"
+                        awslogs-region        = "us-east-1"
+                        awslogs-stream-prefix = "ecs"
+                        max-buffer-size       = "4m"
+                        mode                  = "non-blocking"
+                    }
+                }
+                memory           = 128
+                mountPoints      = [
+                    {
+                        containerPath = "/var/log/nginx"
+                        readOnly      = false
+                        sourceVolume  = "nginx-logs"
+                    },
+                ]
+                name             = "my-container-nodejs"
+                portMappings     = [
+                    {
+                        containerPort = 3000
+                        hostPort      = 0
+                        protocol      = "tcp"
+                    },
+                ]
+                systemControls   = []
+                volumesFrom      = []
+            },
+        ]
+    )
+    cpu                      = "128"
+    execution_role_arn       = "arn:aws:iam::010575877879:role/demo-ecs-task-role-80daafb420241228150305980800000005"
+    family                   = "node-task-80daafb4"
+    id                       = "node-task-80daafb4"
+    ipc_mode                 = [90mnull[0m[0m
+    memory                   = "128"
+    network_mode             = "bridge"
+    pid_mode                 = [90mnull[0m[0m
+    requires_compatibilities = [
+        "EC2",
+    ]
+    revision                 = 1
+    skip_destroy             = false
+    tags                     = {
+        "Environment" = "nodejs-app"
+        "Managed-by"  = "terraform"
+        "Service"     = "my-container-nodejs"
+    }
+    tags_all                 = {
+        "Environment" = "nodejs-app"
+        "Managed-by"  = "terraform"
+        "Service"     = "my-container-nodejs"
+    }
+    task_role_arn            = "arn:aws:iam::010575877879:role/demo-ecs-exec-role-80daafb420241228150304891800000001"
+    track_latest             = false
+
+    volume {
+        configure_at_launch = false
+        host_path           = "/var/log/ecs/nginx"
+        name                = "nginx-logs"
+    }
+}
+# module.ecs_task_definition.aws_ecs_task_definition.app:
+resource "aws_ecs_task_definition" "app" {
+    arn                      = "arn:aws:ecs:us-east-1:010575877879:task-definition/nginx-task-80daafb4:1"
+    arn_without_revision     = "arn:aws:ecs:us-east-1:010575877879:task-definition/nginx-task-80daafb4"
+    container_definitions    = jsonencode(
+        [
+            {
+                cpu              = 256
+                environment      = [
+                    {
+                        name  = "NODEJS_SERVICE_NAME"
+                        value = "ECS-s-node"
+                    },
+                    {
+                        name  = "TASK_INDEX"
+                        value = "b"
+                    },
+                ]
+                essential        = true
+                healthCheck      = {
+                    command     = [
+                        "CMD-SHELL",
+                        "test -r /var/run/docker.sock && curl -f http://localhost/health || exit 1",
+                    ]
+                    interval    = 30
+                    retries     = 3
+                    startPeriod = 60
+                    timeout     = 5
+                }
+                image            = "awsemc1980/my_custom_nginx_image1:v5"
+                logConfiguration = {
+                    logDriver = "awslogs"
+                    options   = {
+                        awslogs-group         = "/ecs/nginx-task-80daafb4"
+                        awslogs-region        = "us-east-1"
+                        awslogs-stream-prefix = "ecs"
+                    }
+                }
+                memory           = 256
+                mountPoints      = [
+                    {
+                        containerPath = "/var/run/docker.sock"
+                        readOnly      = true
+                        sourceVolume  = "docker-sock"
+                    },
+                ]
+                name             = "my-container-nginx"
+                portMappings     = [
+                    {
+                        containerPort = 80
+                        hostPort      = 80
+                        protocol      = "tcp"
+                    },
+                ]
+                systemControls   = []
+                volumesFrom      = []
+            },
+        ]
+    )
+    cpu                      = "256"
+    execution_role_arn       = "arn:aws:iam::010575877879:role/demo-ecs-task-role-80daafb420241228150305980800000005"
+    family                   = "nginx-task-80daafb4"
+    id                       = "nginx-task-80daafb4"
+    ipc_mode                 = [90mnull[0m[0m
+    memory                   = "256"
+    network_mode             = "bridge"
+    pid_mode                 = [90mnull[0m[0m
+    requires_compatibilities = [
+        "EC2",
+    ]
+    revision                 = 1
+    skip_destroy             = false
+    tags_all                 = {}
+    task_role_arn            = "arn:aws:iam::010575877879:role/demo-ecs-exec-role-80daafb420241228150304891800000001"
+    track_latest             = false
+
+    volume {
+        configure_at_launch = false
+        host_path           = "/var/run/docker.sock"
+        name                = "docker-sock"
+    }
+}
+# module.ecs_asg.aws_autoscaling_group.ecs:
+resource "aws_autoscaling_group" "ecs" {
+    arn                              = "arn:aws:autoscaling:us-east-1:010575877879:autoScalingGroup:b2593fc4-c01d-440a-a51d-771f25af97bd:autoScalingGroupName/demo-asg-80daafb4-asg"
+    availability_zones               = [
+        "us-east-1a",
+    ]
+    capacity_rebalance               = true
+    context                          = [90mnull[0m[0m
+    default_cooldown                 = 300
+    default_instance_warmup          = 0
+    desired_capacity                 = 1
+    desired_capacity_type            = [90mnull[0m[0m
+    force_delete                     = false
+    force_delete_warm_pool           = false
+    health_check_grace_period        = 10
+    health_check_type                = "EC2"
+    id                               = "demo-asg-80daafb4-asg"
+    ignore_failed_scaling_activities = false
+    launch_configuration             = [90mnull[0m[0m
+    load_balancers                   = []
+    max_instance_lifetime            = 0
+    max_size                         = 2
+    metrics_granularity              = "1Minute"
+    min_size                         = 1
+    name                             = "demo-asg-80daafb4-asg"
+    name_prefix                      = [90mnull[0m[0m
+    placement_group                  = [90mnull[0m[0m
+    predicted_capacity               = 0
+    protect_from_scale_in            = true
+    service_linked_role_arn          = "arn:aws:iam::010575877879:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling"
+    target_group_arns                = []
+    vpc_zone_identifier              = [
+        "subnet-0aab1c163a2ff7ace",
+    ]
+    wait_for_capacity_timeout        = "10m"
+    warm_pool_size                   = 0
+
+    initial_lifecycle_hook {
+        default_result          = "CONTINUE"
+        heartbeat_timeout       = 300
+        lifecycle_transition    = "autoscaling:EC2_INSTANCE_TERMINATING"
+        name                    = "terminate_hook"
+        notification_metadata   = [90mnull[0m[0m
+        notification_target_arn = [90mnull[0m[0m
+        role_arn                = [90mnull[0m[0m
+    }
+
+    instance_refresh {
+        strategy = "Rolling"
+
+        preferences {
+            auto_rollback                = false
+            checkpoint_delay             = [90mnull[0m[0m
+            instance_warmup              = "300"
+            max_healthy_percentage       = 100
+            min_healthy_percentage       = 50
+            scale_in_protected_instances = "Ignore"
+            skip_matching                = false
+            standby_instances            = "Ignore"
+        }
+    }
+
+    launch_template {
+        id      = "lt-039a2790238c29b74"
+        name    = "launch_template"
+        version = "$Latest"
+    }
+
+    tag {
+        key                 = "AmazonECSManaged"
+        propagate_at_launch = true
+        value               = "true"
+    }
+    tag {
+        key                 = "Name"
+        propagate_at_launch = true
+        value               = "demo-ecs-instance-80daafb4"
+    }
+    tag {
+        key                 = "Purpose"
+        propagate_at_launch = true
+        value               = "ECS"
+    }
+    tag {
+        key                 = "Zone"
+        propagate_at_launch = true
+        value               = "us-east-1a"
+    }
+}
+# module.ecs_asg.aws_autoscaling_group.ecs:
+resource "aws_autoscaling_group" "ecs" {
+    arn                              = "arn:aws:autoscaling:us-east-1:010575877879:autoScalingGroup:b2593fc4-c01d-440a-a51d-771f25af97bd:autoScalingGroupName/demo-asg-80daafb4-asg"
+    availability_zones               = [
+        "us-east-1a",
+    ]
+    capacity_rebalance               = true
+    context                          = [90mnull[0m[0m
+    default_cooldown                 = 300
+    default_instance_warmup          = 0
+    desired_capacity                 = 1
+    desired_capacity_type            = [90mnull[0m[0m
+    force_delete                     = false
+    force_delete_warm_pool           = false
+    health_check_grace_period        = 10
+    health_check_type                = "EC2"
+    id                               = "demo-asg-80daafb4-asg"
+    ignore_failed_scaling_activities = false
+    launch_configuration             = [90mnull[0m[0m
+    load_balancers                   = []
+    max_instance_lifetime            = 0
+    max_size                         = 2
+    metrics_granularity              = "1Minute"
+    min_size                         = 1
+    name                             = "demo-asg-80daafb4-asg"
+    name_prefix                      = [90mnull[0m[0m
+    placement_group                  = [90mnull[0m[0m
+    predicted_capacity               = 0
+    protect_from_scale_in            = true
+    service_linked_role_arn          = "arn:aws:iam::010575877879:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling"
+    target_group_arns                = []
+    vpc_zone_identifier              = [
+        "subnet-0aab1c163a2ff7ace",
+    ]
+    wait_for_capacity_timeout        = "10m"
+    warm_pool_size                   = 0
+
+    initial_lifecycle_hook {
+        default_result          = "CONTINUE"
+        heartbeat_timeout       = 300
+        lifecycle_transition    = "autoscaling:EC2_INSTANCE_TERMINATING"
+        name                    = "terminate_hook"
+        notification_metadata   = [90mnull[0m[0m
+        notification_target_arn = [90mnull[0m[0m
+        role_arn                = [90mnull[0m[0m
+    }
+
+    instance_refresh {
+        strategy = "Rolling"
+
+        preferences {
+            auto_rollback                = false
+            checkpoint_delay             = [90mnull[0m[0m
+            instance_warmup              = "300"
+            max_healthy_percentage       = 100
+            min_healthy_percentage       = 50
+            scale_in_protected_instances = "Ignore"
+            skip_matching                = false
+            standby_instances            = "Ignore"
+        }
+    }
+
+    launch_template {
+        id      = "lt-039a2790238c29b74"
+        name    = "launch_template"
+        version = "$Latest"
+    }
+
+    tag {
+        key                 = "AmazonECSManaged"
+        propagate_at_launch = true
+        value               = "true"
+    }
+    tag {
+        key                 = "Name"
+        propagate_at_launch = true
+        value               = "demo-ecs-instance-80daafb4"
+    }
+    tag {
+        key                 = "Purpose"
+        propagate_at_launch = true
+        value               = "ECS"
+    }
+    tag {
+        key                 = "Zone"
+        propagate_at_launch = true
+        value               = "us-east-1a"
+    }
+}
+
+
+
+
+docker inspect --format='{{json .Config.Labels}}' fec758ce78d8 
+fec758ce78d8 

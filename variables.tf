@@ -115,6 +115,11 @@ variable "nodejs_container_name" {
   default     = "nodejs-app"
 }
 
+# variable "vpc_id" {
+#   description = "ID of the VPC where the service discovery namespace will be created"
+#   type        = string
+# }
+
 
 
 # Update variables.tf in the root directory - Add these variables
@@ -142,13 +147,19 @@ variable "nodejs_desired_count" {
 variable "service_name" {
   description = "Name of the ECS service"
   type        = string
-  default     = "ECS_service"
+  default     = "ECS"
+}
+
+variable "task_count" {
+  type        = number
+  description = "Number of tasks to run"
+  default     = 2
 }
 
 variable "environment" {
   description = "Environment name"
   type        = string
-  default     = "Dev"
+  default     = "dev"
 }
 
 

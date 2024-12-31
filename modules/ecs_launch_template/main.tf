@@ -47,11 +47,30 @@ ECS_LOGLEVEL=debug
 ECS_WARM_POOLS_CHECK=true
 ECS_CONTAINER_METADATA_URI_VERSION=v4
 ECS_DOCKER_API_VERSION=1.44
+ECS_ENABLE_TASK_METADATA=true
 ECS_AVAILABLE_LOGGING_DRIVERS=["json-file","awslogs"]
+ECS_ENABLE_MANAGED_TAGS=true
+ECS_ENABLE_TAG_PROPAGATION=true
+ECS_ENABLE_CONTAINER_METADATA=true
+ECS_CONTAINER_METADATA_URI=/v3/
+ECS_AWSVPC_BLOCK_IMDS=false
+ECS_ENABLE_TASK_IAM_ROLE=true
+ECS_ENABLE_TASK_ENI=true
+ECS_ENABLE_SPOT_INSTANCE_DRAINING=true
+ECS_ENABLE_HEALTH_MONITORING=true
+ECS_CONTAINER_METADATA_POLL_INTERVAL=60
+ECS_STATIC_CONTAINER_PORT_MAPPING=true
+ECS_CONTAINER_INSTANCE_TAGS={"environment":"prod","managed-by":"terraform"}
+ECS_ENABLE_CONTAINER_INSTANCE_TAGGING=true
+ECS_INSTANCE_LOCAL_METADATA_PROVIDER=true
 ECSCONFIG
 
+
 # Install required packages
-sudo yum install -y awscli
+sudo yum install -y unzip
+curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+unzip awscliv2.zip
+sudo ./aws/install
 yum install -y amazon-ssm-agent nc jq
 
 # Start and enable SSM Agent

@@ -348,7 +348,7 @@ resource "aws_lb_target_group" "nodejs_ecs" {
   }
 
   health_check {
-    path                = "/"
+    path                = "/health" 
     healthy_threshold   = 2
     unhealthy_threshold = 3
     timeout             = 5

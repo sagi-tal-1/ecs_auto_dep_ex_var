@@ -1,0 +1,89 @@
+# module.ecs_asg.aws_autoscaling_group.ecs:
+resource "aws_autoscaling_group" "ecs" {
+    arn                              = "arn:aws:autoscaling:us-east-1:010575877879:autoScalingGroup:b2593fc4-c01d-440a-a51d-771f25af97bd:autoScalingGroupName/demo-asg-80daafb4-asg"
+    availability_zones               = [
+        "us-east-1a",
+    ]
+    capacity_rebalance               = true
+    context                          = [90mnull[0m[0m
+    default_cooldown                 = 300
+    default_instance_warmup          = 0
+    desired_capacity                 = 1
+    desired_capacity_type            = [90mnull[0m[0m
+    force_delete                     = false
+    force_delete_warm_pool           = false
+    health_check_grace_period        = 10
+    health_check_type                = "EC2"
+    id                               = "demo-asg-80daafb4-asg"
+    ignore_failed_scaling_activities = false
+    launch_configuration             = [90mnull[0m[0m
+    load_balancers                   = []
+    max_instance_lifetime            = 0
+    max_size                         = 2
+    metrics_granularity              = "1Minute"
+    min_size                         = 1
+    name                             = "demo-asg-80daafb4-asg"
+    name_prefix                      = [90mnull[0m[0m
+    placement_group                  = [90mnull[0m[0m
+    predicted_capacity               = 0
+    protect_from_scale_in            = true
+    service_linked_role_arn          = "arn:aws:iam::010575877879:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling"
+    target_group_arns                = []
+    vpc_zone_identifier              = [
+        "subnet-0aab1c163a2ff7ace",
+    ]
+    wait_for_capacity_timeout        = "10m"
+    warm_pool_size                   = 0
+
+    initial_lifecycle_hook {
+        default_result          = "CONTINUE"
+        heartbeat_timeout       = 300
+        lifecycle_transition    = "autoscaling:EC2_INSTANCE_TERMINATING"
+        name                    = "terminate_hook"
+        notification_metadata   = [90mnull[0m[0m
+        notification_target_arn = [90mnull[0m[0m
+        role_arn                = [90mnull[0m[0m
+    }
+
+    instance_refresh {
+        strategy = "Rolling"
+
+        preferences {
+            auto_rollback                = false
+            checkpoint_delay             = [90mnull[0m[0m
+            instance_warmup              = "300"
+            max_healthy_percentage       = 100
+            min_healthy_percentage       = 50
+            scale_in_protected_instances = "Ignore"
+            skip_matching                = false
+            standby_instances            = "Ignore"
+        }
+    }
+
+    launch_template {
+        id      = "lt-039a2790238c29b74"
+        name    = "launch_template"
+        version = "$Latest"
+    }
+
+    tag {
+        key                 = "AmazonECSManaged"
+        propagate_at_launch = true
+        value               = "true"
+    }
+    tag {
+        key                 = "Name"
+        propagate_at_launch = true
+        value               = "demo-ecs-instance-80daafb4"
+    }
+    tag {
+        key                 = "Purpose"
+        propagate_at_launch = true
+        value               = "ECS"
+    }
+    tag {
+        key                 = "Zone"
+        propagate_at_launch = true
+        value               = "us-east-1a"
+    }
+}

@@ -149,3 +149,10 @@ variable "service_name_id" {
   description = "The name of the ECS service to monitor"
   type        = string
 }
+
+# variable "cluster_id" {
+#   description = "The ID of the ECS cluster"
+#   type        = string
+# }
+
+

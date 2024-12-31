@@ -1,25 +1,85 @@
 const express = require('express');
 const app = express();
-const port = process.env.NODE_PORT || 3000;
 
-const uniqueIdentity = process.env.UNIQUE_IDENTITY || 'default-identity';
+const PORT = process.env.PORT || 3000;
 
-app.use((req, res, next) => {
-  console.log(`Received request: ${req.method} ${req.url}`);
-  console.log('Headers:', req.headers);
-  next();
+// Log environment variables
+console.log("Service Identity:", process.env.SERVICE_IDENTITY);
+console.log("Port:", process.env.PORT);
+console.log("Task Index:", process.env.TASK_INDEX);
+console.log("Task ID:", process.env.TASK_ID);
+console.log("Service Discovery Name:", process.env.SERVICE_DISCOVERY_NAME);
+console.log("Discovery Interval:", process.env.DISCOVERY_INTERVAL);
+
+app.get('/', (req, res) => {
+    res.json({
+        service: process.env.NODEJS_SERVICE_NAME,
+        message: 'Node.js service is running',
+        taskIndex: process.env.TASK_INDEX,
+        serviceDiscovery: process.env.SERVICE_DISCOVERY_NAME,
+        containerPort: PORT
+    });
 });
 
-app.get('/how-am-i', (req, res) => {
-  console.log(`Responding with - Unique Identity: ${uniqueIdentity}`);
-  res.send(`Unique Identity: ${uniqueIdentity}\n`);
-});
-
-// Add health check endpoint
 app.get('/health', (req, res) => {
-  res.status(200).send('OK');
+    res.status(200).json({
+        status: 'healthy',
+        containerPort: PORT,
+        timestamp: new Date().toISOString()
+    });
 });
 
-app.listen(port, '0.0.0.0', () => {
-  console.log(`Node.js service listening at http://0.0.0.0:${port}`);
+app.use((err, req, res, next) => {
+    console.error(err.stack);
+    res.status(500).send('Something went wrong!');
 });
+
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Server running on container port ${PORT}`);
+    console.log('Environment variables:');
+    console.log(`NODEJS_SERVICE_NAME: ${process.env.NODEJS_SERVICE_NAME}`);
+    console.log(`SERVICE_IDENTITY: ${process.env.SERVICE_IDENTITY}`);
+    console.log(`TASK_INDEX: ${process.env.TASK_INDEX}`);
+    console.log(`TASK_ID: ${process.env.TASK_ID}`);
+    console.log(`SERVICE_DISCOVERY_NAME: ${process.env.SERVICE_DISCOVERY_NAME}`);
+    console.log(`DISCOVERY_INTERVAL: ${process.env.DISCOVERY_INTERVAL}`);
+});
+
+
+
+
+#### original 
+// const express = require('express');
+// const app = express();
+
+// // Get port from environment variable as specified in task definition
+// const PORT = process.env.PORT || 3000;
+
+// // Basic route
+// app.get('/', (req, res) => {
+//     res.json({
+//         service: process.env.SERVICE_IDENTITY,
+//         message: 'Node.js service is running',
+//         taskIndex: process.env.TASK_INDEX,
+//         serviceDiscovery: process.env.SERVICE_DISCOVERY_NAME,
+//         containerPort: PORT,
+//         timestamp: new Date().toISOString()
+//     });
+// });
+
+// // Health check endpoint
+// app.get('/health', (req, res) => {
+//     res.status(200).json({
+//         status: 'healthy',
+//         containerPort: PORT,
+//         timestamp: new Date().toISOString()
+//     });
+// });
+
+// app.listen(PORT, '0.0.0.0', () => {
+//     console.log(`Server running on container port ${PORT}`);
+//     console.log('Environment variables:');
+//     console.log(`SERVICE_IDENTITY: ${process.env.SERVICE_IDENTITY}`);
+//     console.log(`TASK_INDEX: ${process.env.TASK_INDEX}`);
+//     console.log(`SERVICE_DISCOVERY_NAME: ${process.env.SERVICE_DISCOVERY_NAME}`);
+// });
