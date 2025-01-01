@@ -1,0 +1,96 @@
+{
+  "alb_dns_name": {
+    "sensitive": false,
+    "value": "demo-alb-82a5a8b2-60644634.us-east-1.elb.amazonaws.com",
+    "type": "string"
+  },
+  "application_url": {
+    "sensitive": false,
+    "value": "http://demo-alb-82a5a8b2-60644634.us-east-1.elb.amazonaws.com",
+    "type": "string"
+  },
+  "container_name": {
+    "sensitive": false,
+    "value": "my-container-nginx",
+    "type": "string"
+  },
+  "container_names": {
+    "sensitive": false,
+    "value": {
+      "nginx": "my-container-nginx",
+      "nodejs": "my-container-nodejs"
+    },
+    "type": [
+      "object",
+      {
+        "nginx": "string",
+        "nodejs": "string"
+      }
+    ]
+  },
+  "debug_ecs_service": {
+    "sensitive": false,
+    "value": {
+      "service_id": "arn:aws:ecs:us-east-1:010575877879:service/demo-cluster-82a5a8b2/ECS-s-node",
+      "service_name": "ECS-s-node"
+    },
+    "type": [
+      "object",
+      {
+        "service_id": "string",
+        "service_name": "string"
+      }
+    ]
+  },
+  "full_access_policy_arn": {
+    "sensitive": false,
+    "value": "arn:aws:iam::010575877879:policy/demo-ecs-node-role-82a5a8b2-full20241231140303900100000007",
+    "type": "string"
+  },
+  "instance_ips": {
+    "sensitive": false,
+    "value": [],
+    "type": [
+      "list",
+      "string"
+    ]
+  },
+  "key_file_path": {
+    "sensitive": false,
+    "value": "/Users/sagi/Desktop/terraform/git/ecs_auto_deployment-/ecs-instance-key-82a5a8b2.pem",
+    "type": "string"
+  },
+  "key_name": {
+    "sensitive": false,
+    "value": "ecs-instance-key-82a5a8b2",
+    "type": "string"
+  },
+  "module_path": {
+    "sensitive": false,
+    "value": ".",
+    "type": "string"
+  },
+  "rendered_user_data": {
+    "sensitive": true,
+    "value": "#!/bin/bash\n\n# Enable debugging and logging\nset -x\nexec > >(tee /var/log/user-data.log | logger -t user-data -s 2>/dev/console) 2>&1\n\n# Function for logging\nlog() {\n    echo \"[$(date '+%Y-%m-%d %H:%M:%S')] $1\"\n}\n\nlog \"Starting user data script execution\"\n\nsleep 5\n\n# Function to wait for yum to be free\nwait_for_yum() {\n    while sudo fuser /var/run/yum.pid > /dev/null 2>&1; do\n        log \"Waiting for yum to be free...\"\n        sleep 5\n    done\n}\n\n# Update system packages\nlog 'Updating system packages'\nsudo yum update -y\nwait\n\n\n# Install AWS CLI\nlog \"Installing AWS CLI\"\nsudo yum install -y aws-cli\nwait\n\n# Set and export variables\nexport CLUSTER_NAME=\"demo-cluster-82a5a8b2\"\nexport LOG_GROUP_NAME=\"log_group-82a5a8b2\"\nexport LOG_STREAM_NAME=\"ecs\"\nexport REGION=\"us-east-1\"\n\n\n# Write environment variables to /etc/environment for persistence\necho \"CLUSTER_NAME=demo-cluster-82a5a8b2\" | sudo tee -a /etc/environment\necho \"LOG_GROUP_NAME=log_group-82a5a8b2\" | sudo tee -a /etc/environment\necho \"LOG_STREAM_NAME=ecs\" | sudo tee -a /etc/environment\necho \"REGION=us-east-1\" | sudo tee -a /etc/environment\n\n\n# # Reload environment variables to make them available in the current session\nsource /etc/environment\n\n# Write environment variables to /etc/environment and /etc/ecs/ecs.config directory\nlog \"Setting up environment variables\"\nsudo mkdir -p /etc/ecs\nsudo tee /etc/ecs/ecs.config > /dev/null <<EOF\nECS_CLUSTER=$CLUSTER_NAME\nECS_LOGLEVEL=debug\nECS_LOGFILE=/var/log/ecs/ecs-agent.log\nECS_AVAILABLE_LOGGING_DRIVERS=[\"json-file\",\"awslogs\"]\nECS_ENABLE_CONTAINER_METADATA=true\nECS_ENGINE_TASK_CLEANUP_WAIT_DURATION=1h\nECS_IMAGE_CLEANUP_INTERVAL=10m\nECS_ENGINE_AUTH_TYPE=docker\n\nECS_DATADIR=/data\nECS_ENABLE_SPOT_INSTANCE_DRAINING=true\nECS_CONTAINER_STOP_TIMEOUT=30s\nECS_CONTAINER_START_TIMEOUT=3m\nECS_ENABLE_TASK_IAM_ROLE=true\nECS_DOCKER_API_VERSION=1.24\nECS_CONTAINER_METADATA_URI_ENDPOINT=v4\nEOF\n\ndocker stop ecs-agent\n\ndocker rm -f ecs-agent\n\n\n# delete the ECS agent's state file to allow it to reinitialize with the correct configuration:\nsudo rm /var/lib/ecs/data/agent.db\n\nsudo systemctl restart ecs\n\n\n# Additional verification steps\ndocker info || log \"Docker not running properly\"\ncurl -s http://localhost:51678/v1/metadata || log \"ECS agent not responding\"\n\n\n\n# # Update the system and install the latest ECS agent\n# yum update -y\n# amazon-linux-extras install -y ecs\n# yum install -y ecs-init\n\n# # Configure ECS cluster\n# echo \"ECS_CLUSTER=MyCluster\" >> /etc/ecs/ecs.config\n\n# # Start ECS service\n# systemctl enable --now ecs\n\n# # Restart Docker to ensure it's running the latest version\n# systemctl restart docker\n\n# # Wait for Docker to be fully operational\n# timeout=60\n# while [ $timeout -gt 0 ]; do\n#     if docker info &>/dev/null; then\n#         break\n#     fi\n#     sleep 1\n#     ((timeout--))\n# done\n\n# if [ $timeout -eq 0 ]; then\n#     echo \"Docker did not start within the expected time frame\"\n#     exit 1\n# fi\n\n# # Check the ECS agent version\n# ecs_agent_version=$(docker inspect ecs-agent | grep Version | head -n 1)\n# echo \"ECS Agent Version: $ecs_agent_version\"\n\n# # Verify ECS agent is running\n# if curl -s http://localhost:51678/v1/metadata &>/dev/null; then\n#     echo \"ECS agent is responding\"\n# else\n#     echo \"ECS agent is not responding\"\n# fi\n\n# echo \"User data script completed\"\n\n\n# # Write environment variables to /etc/environment and /etc/ecs/ecs.config directory\n# log \"Setting up environment variables\"\n# sudo mkdir -p /etc/ecs\n# sudo tee /etc/ecs/ecs.config > /dev/null <<EOF\n# ECS_CLUSTER=$CLUSTER_NAME\n# ECS_LOGLEVEL=debug\n# ECS_LOGFILE=/var/log/ecs/ecs-agent.log\n# ECS_AVAILABLE_LOGGING_DRIVERS=[\"json-file\",\"awslogs\"]\n# ECS_ENABLE_CONTAINER_METADATA=true\n# ECS_ENGINE_TASK_CLEANUP_WAIT_DURATION=1h\n# ECS_IMAGE_CLEANUP_INTERVAL=10m\n# ECS_ENGINE_AUTH_TYPE=docker\n# ECS_ENGINE_AUTH_DATA={\"https://index.docker.io/v1/\": {\"username\": \"$DOCKERHUB_USERNAME\", \"password\": \"$DOCKERHUB_PASSWORD\"}}\n# ECS_DATADIR=/data\n# ECS_ENABLE_SPOT_INSTANCE_DRAINING=true\n# ECS_CONTAINER_STOP_TIMEOUT=30s\n# ECS_CONTAINER_START_TIMEOUT=3m\n# ECS_ENABLE_TASK_IAM_ROLE=true\n# EOF\n\n# # Set proper permissions\n# log \"Setting permissions on ECS config\"\n# sudo chmod 644 /etc/ecs/ecs.config\n\n# # Create data directory\n# log \"Creating ECS data directory\"\n# sudo mkdir -p /data\n# sudo chmod 744 /data\n\n# # Clean up any existing ECS containers\n# log \"Cleaning up existing ECS containers\"\n# if command -v docker &> /dev/null; then\n#     if docker ps -a --filter name=ecs-agent | grep -q .; then\n#         docker rm -f $(docker ps -a --filter name=ecs-agent -q)\n#     fi\n# fi\n\n# # Stop and disable the default ECS service if it exists\n# log \"Managing ECS services\"\n# if systemctl is-active ecs.service &> /dev/null; then\n#     sudo systemctl stop ecs.service\n#     sudo systemctl disable ecs.service\n# fi\n\n# # Update and start Docker\n# log \"Updating and starting Docker\"\n# sudo yum update -y docker\n# sudo systemctl enable docker\n# sudo systemctl start docker\n\n# # Wait for Docker to be fully started\n# log 'Waiting for Docker to start...'\n# until sudo systemctl is-active --quiet docker; do\n#     sleep 5\n# done\n\n# # Update ECS agent\n# log \"Updating ECS agent\"\n# sudo yum update -y ecs-init\n# sudo systemctl stop ecs \n# docker rm -f ecs-agent\n# rm -rf /var/lib/ecs/data/*\n# sudo systemctl enable ecs\n# sudo systemctl start ecs\n\n# # Final verification\n# log \"Verifying ECS agent status\"\n# sleep 10\n# sudo systemctl status ecs\n\n# # Log completion\n# log \"User data script completed\"\n\n# # Additional verification steps\n# docker info || log \"Docker not running properly\"\n# curl -s http://localhost:51678/v1/metadata || log \"ECS agent not responding\"\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n# # Function for logging\n# log() {\n#     echo \"[$(date '+%Y-%m-%d %H:%M:%S')] $1\"\n# }\n\n# #install cli\n# sudo yum install -y aws-cli\n\n\n# # Function to clean up any existing ECS agent containers\n# cleanup_ecs_containers() {\n#     log \"Checking for existing ECS agent containers...\"\n    \n#     # Stop any running ecs-agent container\n#     if docker ps -q --filter name=ecs-agent | grep -q .; then\n#         log \"Found running ECS agent container. Stopping it...\"\n#         sudo docker stop ecs-agent || log \"Warning: Failed to stop ECS agent container\"\n#     fi\n    \n#     # Remove any existing ecs-agent container (running or stopped)\n#     if docker ps -a -q --filter name=ecs-agent | grep -q .; then\n#         log \"Found ECS agent container. Removing it...\"\n#         sudo docker rm -f ecs-agent || log \"Warning: Failed to remove ECS agent container\"\n#     fi\n    \n#     # Double check no containers are left\n#     if docker ps -a -q --filter name=ecs-agent | grep -q .; then\n#         log \"Error: Failed to remove all ECS agent containers\"\n#         return 1\n#     fi\n    \n#     log \"ECS agent container cleanup completed successfully\"\n#     return 0\n# }\n\n# # Stop the services\n# log \"Stopping ECS service\"\n# sudo systemctl stop docker || log \"Failed to stop docker service\"\n# sudo systemctl stop ecs || log \"Failed to stop ECS service\"\n# sleep 5\n\n# # Update Docker\n# sudo yum update docker\n\n# # Start Docker\n# sudo systemctl start docker\n\n# # Clean up any existing ECS containers before proceeding\n# if ! cleanup_ecs_containers; then\n#     log \"Error: Failed to clean up existing ECS containers. Exiting.\"\n#     exit 1\n# fi\n\n# #Create ECS config file\n# log \"Creating ECS config\"\n# sudo bash -c 'cat << EOF > /etc/ecs/ecs.config\n# ECS_CLUSTER=demo-cluster-82a5a8b2\n# ECS_LOGLEVEL=debug\n# ECS_AVAILABLE_LOGGING_DRIVERS=[\"json-file\",\"awslogs\"]\n# ECS_ENABLE_CONTAINER_METADATA=true\n# ECS_ENGINE_TASK_CLEANUP_WAIT_DURATION=1h\n# ECS_IMAGE_CLEANUP_INTERVAL=10m\n# ECS_ENGINE_AUTH_TYPE=docker\n\n# ECS_DATADIR=/data\n# ECS_ENABLE_SPOT_INSTANCE_DRAINING=true\n# ECS_CONTAINER_STOP_TIMEOUT=30s\n# ECS_CONTAINER_START_TIMEOUT=3m\n# ECS_ENABLE_TASK_IAM_ROLE=true\n# EOF'\n\n# # Set proper permissions\n# log \"Setting ECS config permissions\"\n# sudo chmod 644 /etc/ecs/ecs.config\n\n\n# #restart docker\n# sudo systemctl restart docker\n\n\n# #update ecs agent\n# sudo yum update -y ecs-init\n\n# #restart ecs agent\n# sudo systemctl restart ecs\n\n\n# Start ECS agent with platform specification\n# sudo systemctl start ecs\n# log \"Starting ECS agent container\"\n# sudo docker run --name ecs-agent \\\n#     --detach=true \\\n#     --restart=on-failure:10 \\\n#     --volume=/var/run:/var/run \\\n#     --volume=/var/log/ecs:/log \\\n#     --volume=/var/lib/ecs/data:/data \\\n#     --volume=/etc/ecs:/etc/ecs \\\n#     --net=host \\\n#     --env-file=/etc/ecs/ecs.config \\\n#     --platform linux/amd64 \\\n#     public.ecr.aws/ecs/amazon-ecs-agent:latest\n\n\n\n\n\n\n",
+    "type": "string"
+  },
+  "selected_ecs_optimized_ami_id": {
+    "sensitive": false,
+    "value": "ami-0448a709165fd89ff",
+    "type": "string"
+  },
+  "ssh_commands": {
+    "sensitive": false,
+    "value": [],
+    "type": [
+      "tuple",
+      []
+    ]
+  },
+  "task_definition_container_name_for_nginx": {
+    "sensitive": false,
+    "value": "my-container-nginx",
+    "type": "string"
+  }
+}

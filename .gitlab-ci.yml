@@ -1,0 +1,84 @@
+stages:
+  - init
+  - validate
+  - plan
+  - apply
+  - destroy
+
+variables:
+  TF_VERSION: "1.5.0" # Terraform version to use
+  TF_WORKING_DIR: "./terraform" # Directory containing Terraform configuration files
+
+before_script:
+  # Install Terraform in the runner
+  - echo "Installing Terraform version $TF_VERSION"
+  - apk add --no-cache curl unzip
+  - curl -fsSL https://releases.hashicorp.com/terraform/${TF_VERSION}/terraform_${TF_VERSION}_linux_amd64.zip -o terraform.zip
+  - unzip terraform.zip -d /usr/local/bin
+  - terraform version
+
+# 1. Initialization stage: Prepares the backend and providers.
+init:
+  stage: init
+  script:
+    # Initialize Terraform: ensures backend and provider setup
+    - terraform -chdir=$TF_WORKING_DIR init
+  only:
+    - main # Run on the main branch only
+  tags:
+    - terraform
+
+# 2. Validation stage: Ensures the configuration syntax is correct.
+validate:
+  stage: validate
+  script:
+    # Validate Terraform files: checks for syntax errors and resource integrity
+    - terraform -chdir=$TF_WORKING_DIR validate
+  only:
+    - merge_requests # Run on merge requests to ensure no syntax errors in branches
+  tags:
+    - terraform
+
+# 3. Planning stage: Generates a plan to show changes Terraform will make.
+plan:
+  stage: plan
+  script:
+    # Create an execution plan: maps to `aws_autoscaling_group` configuration
+    - terraform -chdir=$TF_WORKING_DIR plan -out=tfplan
+    # Save the plan for review and later apply
+    - terraform show -json tfplan > tfplan.json
+  artifacts:
+    paths:
+      - $TF_WORKING_DIR/tfplan.json
+    expire_in: 1 week # Keep the plan for review
+  tags:
+    - terraform
+
+# 4. Manual Apply stage: Applies the Terraform configuration after approval.
+manual_apply:
+  stage: apply
+  script:
+    # Apply the planned changes: creates or updates the `aws_autoscaling_group`
+    - terraform -chdir=$TF_WORKING_DIR apply -auto-approve tfplan
+  environment:
+    name: production
+    url: https://your-production-environment-url
+  when: manual # Allows manual approval before applying
+  only:
+    - main # Only run on the main branch
+  tags:
+    - terraform
+
+# 5. Manual Destroy stage: Tears down resources with manual approval.
+manual_destroy:
+  stage: destroy
+  script:
+    # Destroy resources: deletes the `aws_autoscaling_group` and other resources
+    - terraform -chdir=$TF_WORKING_DIR destroy -auto-approve
+  environment:
+    name: production
+    action: stop
+  when: manual # Allows manual approval to avoid accidental deletions
+  tags:
+    - terraform
+
