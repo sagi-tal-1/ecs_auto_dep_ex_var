@@ -1,0 +1,25 @@
+=== ECS Deployment Insights ===
+Timestamp: 20250309112332
+Cluster: demo-cluster-7b0d322f
+Nginx Service: demo-ecs-Nservice-7b0d322f
+Node.js Service: ECS-s-node
+Log File: ./ecs_deployment_logs/ecs_deployment_20250309112332.log
+===============================
+
+--- Nginx Service Overview ---
+{
+    "status": "ACTIVE",
+    "runningCount": 1,
+    "desiredCount": 1,
+    "pendingCount": 0,
+    "events": "(service demo-ecs-Nservice-7b0d322f) registered 1 targets in (target-group arn:aws:elasticloadbalancing:us-east-1:010575877879:targetgroup/tg-ecs-demo-alb-7b0d322f-d9ca/46da754a58f2f53b)"
+}
+
+--- Node.js Service Overview ---
+{
+    "status": "ACTIVE",
+    "runningCount": 2,
+    "desiredCount": 2,
+    "pendingCount": 0,
+    "events": "(service ECS-s-node) registered 1 targets in (target-group arn:aws:elasticloadbalancing:us-east-1:010575877879:targetgroup/tg-nodejs-demo-alb-7b0d322f-d9ca/92e484c4d945137f)"
+}

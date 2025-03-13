@@ -31,12 +31,12 @@ resource "tls_private_key" "ssh_key" {
   rsa_bits  = 4096
 }
 
-resource "aws_key_pair" "generated_key1" {
+resource "aws_key_pair" "generated_key" {
   key_name   = "ecs-instance-key-${random_id.unique.hex}"
   public_key = tls_private_key.ssh_key.public_key_openssh
 }
 
-resource "local_file" "private_key2" {
+resource "local_file" "private_key" {
   content         = tls_private_key.ssh_key.private_key_pem
   filename        = "${path.cwd}/${aws_key_pair.generated_key.key_name}.pem"
   file_permission = "0600"
