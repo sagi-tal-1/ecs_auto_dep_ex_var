@@ -37,7 +37,9 @@ terraform apply
 
 Terraform Output:
 
-Changes to Outputs:
+
+Outputs:
+
 alb_dns_name: (This value will be known after applying the Terraform configuration. This is the DNS name of the AWS Application Load Balancer (ALB)).
 application_url: (This value will be known after applying. This is the URL to access the deployed application).
 container_name: my-container-nginx (The name of the container running NGINX in the ECS task).
@@ -47,7 +49,6 @@ nodejs: my-container-nodejs (Name of the Node.js container).
 debug_ecs_service:
 service_id: (This value will be known after applying).
 service_name: ECS-s-node (Name of the ECS service running the Node.js container).
-full_access_policy_arn: (This value will be known after applying. This is the ARN of the IAM policy granting full access).
 instance_ips: (This value will be known after applying. IP addresses of instances in the ECS cluster).
 key_file_path: (This value will be known after applying. The path to the SSH key file for accessing the instances).
 key_name: (This value will be known after applying. The name of the SSH key used for the EC2 instances).
